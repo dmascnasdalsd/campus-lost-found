@@ -8,13 +8,15 @@ import { useAuthStore } from '@/stores/auth'
 import type { ReportDetail, User } from '@/api/types'
 
 // API 模块被内存 fake 替换：测试只断言「给定 API 返回，用户看到什么、点击后发出什么请求」。
-const { getReport, createClaim } = vi.hoisted(() => ({
+const { getReport, createClaim, createReportFlag } = vi.hoisted(() => ({
   getReport: vi.fn(),
-  createClaim: vi.fn()
+  createClaim: vi.fn(),
+  createReportFlag: vi.fn()
 }))
 
 vi.mock('@/api/reports', () => ({ getReport }))
 vi.mock('@/api/claims', () => ({ createClaim }))
+vi.mock('@/api/flags', () => ({ createReportFlag }))
 
 const stub = { template: '<div />' }
 
@@ -94,6 +96,7 @@ describe('ReportDetailPage 认领申请', () => {
   beforeEach(() => {
     getReport.mockReset()
     createClaim.mockReset()
+    createReportFlag.mockReset()
     localStorage.clear()
   })
 
@@ -153,5 +156,39 @@ describe('ReportDetailPage 认领申请', () => {
 
     expect(wrapper.find('.claim__open').exists()).toBe(false)
     expect(wrapper.text()).toContain('该启事已结束')
+  })
+})
+
+describe('ReportDetailPage 举报', () => {
+  beforeEach(() => {
+    getReport.mockReset()
+    createClaim.mockReset()
+    createReportFlag.mockReset()
+    localStorage.clear()
+  })
+
+  it('点举报打开理由弹窗，选理由后提交成功并提示', async () => {
+    createReportFlag.mockResolvedValue({})
+    const { wrapper } = await mountDetail({ authed: true, userId: 99 })
+
+    await wrapper.find('.flag__open').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.flag-modal').exists()).toBe(true)
+
+    await wrapper.find('input[value="ABUSE"]').setValue()
+    await wrapper.find('.flag-modal__detail').setValue('包含辱骂内容')
+    await wrapper.find('.flag-modal__submit').trigger('click')
+    await flushPromises()
+
+    expect(createReportFlag).toHaveBeenCalledWith('1', { reason: 'ABUSE', detail: '包含辱骂内容' })
+    expect(wrapper.text()).toContain('举报已提交')
+    expect(wrapper.find('.flag-modal').exists()).toBe(false)
+  })
+
+  it('未登录时举报入口引导登录', async () => {
+    const { wrapper } = await mountDetail({ authed: false })
+
+    expect(wrapper.find('.flag__open').exists()).toBe(false)
+    expect(wrapper.find('.flag__login').exists()).toBe(true)
   })
 })

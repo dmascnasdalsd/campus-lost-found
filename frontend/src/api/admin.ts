@@ -1,5 +1,12 @@
 import { request } from './client'
-import type { AuditLogView, PageResult, ReportDetail, ReportStatus } from './types'
+import type {
+  AuditLogView,
+  FlagHandleResult,
+  FlagView,
+  PageResult,
+  ReportDetail,
+  ReportStatus
+} from './types'
 
 /** 复核队列筛选：留空表示查看全部启事，PENDING_REVIEW 表示只看待复核。 */
 export type AdminReportFilter = '' | ReportStatus
@@ -44,4 +51,18 @@ export function unpinReport(id: number | string): Promise<ReportDetail> {
 /** 审计日志：按时间倒序分页。 */
 export function listAuditLogs(page = 0, size = 20): Promise<PageResult<AuditLogView>> {
   return request<PageResult<AuditLogView>>(`/admin/audit-logs?page=${page}&size=${size}`)
+}
+
+/** 举报列表：status 缺省时返回全部举报。 */
+export function listAdminFlags(status?: string): Promise<PageResult<FlagView>> {
+  const suffix = status ? `?status=${encodeURIComponent(status)}` : ''
+  return request<PageResult<FlagView>>(`/admin/flags${suffix}`)
+}
+
+/** 处置举报：驳回举报 / 下架内容 / 禁用用户。 */
+export function resolveFlag(id: number | string, action: FlagHandleResult): Promise<FlagView> {
+  return request<FlagView>(`/admin/flags/${id}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ action })
+  })
 }

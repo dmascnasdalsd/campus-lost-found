@@ -3,7 +3,8 @@ import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ApiError } from '@/api/client'
 import { listMessages, sendMessage } from '@/api/chats'
-import type { MessageView } from '@/api/types'
+import { createMessageFlag } from '@/api/flags'
+import type { FlagReason, MessageView } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -15,6 +16,57 @@ const failed = ref(false)
 const draft = ref('')
 const sending = ref(false)
 const sendError = ref('')
+
+/** 举报理由选项：与后端 FlagReason 枚举一致。 */
+const REPORT_REASONS: { value: FlagReason; label: string }[] = [
+  { value: 'FAKE', label: '虚假信息' },
+  { value: 'AD', label: '广告' },
+  { value: 'ABUSE', label: '辱骂' },
+  { value: 'OTHER', label: '其他' }
+]
+
+const flagTarget = ref<MessageView | null>(null)
+const flagReason = ref<FlagReason>('FAKE')
+const flagDetail = ref('')
+const flagSubmitting = ref(false)
+const flagError = ref('')
+const flagSuccess = ref('')
+
+/** 打开举报弹窗（针对对方发送的消息）。 */
+function openFlag(message: MessageView): void {
+  flagTarget.value = message
+  flagReason.value = 'FAKE'
+  flagDetail.value = ''
+  flagError.value = ''
+}
+
+function closeFlag(): void {
+  flagTarget.value = null
+  flagReason.value = 'FAKE'
+  flagDetail.value = ''
+  flagError.value = ''
+}
+
+/** 提交举报：成功后关闭弹窗并提示。 */
+async function submitFlag(): Promise<void> {
+  if (!flagTarget.value) {
+    return
+  }
+  flagSubmitting.value = true
+  flagError.value = ''
+  try {
+    await createMessageFlag(String(flagTarget.value.id), {
+      reason: flagReason.value,
+      detail: flagDetail.value.trim() === '' ? undefined : flagDetail.value.trim()
+    })
+    closeFlag()
+    flagSuccess.value = '举报已提交'
+  } catch (error) {
+    flagError.value = error instanceof ApiError ? error.message : '提交失败，请稍后重试'
+  } finally {
+    flagSubmitting.value = false
+  }
+}
 
 onMounted(() => {
   void load()
@@ -62,6 +114,7 @@ async function onSend(): Promise<void> {
     <p v-else-if="failed" class="state state--error">会话不存在或加载失败。</p>
 
     <template v-else>
+      <p v-if="flagSuccess" class="chat__success">{{ flagSuccess }}</p>
       <ul class="chat__messages">
         <li
           v-for="message in messages"
@@ -69,7 +122,17 @@ async function onSend(): Promise<void> {
           class="message"
           :class="isSelf(message) ? 'message--self' : 'message--peer'"
         >
-          <p class="message__sender">{{ isSelf(message) ? '我' : (message.senderNickname ?? '对方') }}</p>
+          <p class="message__sender">
+            {{ isSelf(message) ? '我' : (message.senderNickname ?? '对方') }}
+            <button
+              v-if="!isSelf(message)"
+              class="message__flag"
+              type="button"
+              @click="openFlag(message)"
+            >
+              举报
+            </button>
+          </p>
           <p class="message__body">{{ message.body }}</p>
         </li>
       </ul>
@@ -87,6 +150,47 @@ async function onSend(): Promise<void> {
         </button>
       </form>
       <p v-if="sendError" class="chat__error">{{ sendError }}</p>
+
+      <div v-if="flagTarget" class="flag-modal" role="dialog">
+        <div class="flag-modal__box">
+          <h2 class="flag-modal__title">举报消息</h2>
+          <fieldset class="flag-modal__reasons">
+            <legend class="flag-modal__legend">举报理由</legend>
+            <label
+              v-for="option in REPORT_REASONS"
+              :key="option.value"
+              class="flag-modal__option"
+            >
+              <input
+                v-model="flagReason"
+                type="radio"
+                name="flag-reason"
+                :value="option.value"
+                :class="`flag-modal__reason-${option.value}`"
+              />
+              {{ option.label }}
+            </label>
+          </fieldset>
+          <textarea
+            v-model="flagDetail"
+            class="flag-modal__detail"
+            rows="2"
+            placeholder="补充说明（可选）"
+          ></textarea>
+          <p v-if="flagError" class="flag-modal__error">{{ flagError }}</p>
+          <div class="flag-modal__actions">
+            <button
+              class="flag-modal__submit"
+              type="button"
+              :disabled="flagSubmitting"
+              @click="submitFlag"
+            >
+              {{ flagSubmitting ? '提交中…' : '提交举报' }}
+            </button>
+            <button class="flag-modal__cancel" type="button" @click="closeFlag">取消</button>
+          </div>
+        </div>
+      </div>
     </template>
   </section>
 </template>
@@ -169,5 +273,108 @@ async function onSend(): Promise<void> {
   margin: 8px 0 0;
   color: #c0392b;
   font-size: 13px;
+}
+
+.chat__success {
+  margin: 0 0 8px;
+  color: #2e7d32;
+  font-size: 13px;
+}
+
+.message__flag {
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid #c0392b;
+  border-radius: 4px;
+  background: #fff;
+  color: #c0392b;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.flag-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.flag-modal__box {
+  width: 340px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.flag-modal__title {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.flag-modal__reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid #e4e6eb;
+  border-radius: 6px;
+}
+
+.flag-modal__legend {
+  padding: 0 4px;
+  color: #444;
+  font-size: 12px;
+}
+
+.flag-modal__option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.flag-modal__detail {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid #d9dbe0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.flag-modal__error {
+  margin: 8px 0 0;
+  color: #c0392b;
+  font-size: 13px;
+}
+
+.flag-modal__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.flag-modal__submit {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #c0392b;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.flag-modal__cancel {
+  padding: 6px 14px;
+  border: 1px solid #d9dbe0;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
 }
 </style>

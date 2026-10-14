@@ -206,6 +206,41 @@ export interface NotificationListView {
 /** 管理员内容治理动作类型。 */
 export type ReportActionType = 'APPROVE' | 'REJECT' | 'TAKE_DOWN' | 'PIN' | 'UNPIN'
 
+/** 举报目标类型：启事 / 会话消息。 */
+export type FlagTargetType = 'REPORT' | 'MESSAGE'
+
+/** 举报理由。 */
+export type FlagReason = 'FAKE' | 'AD' | 'ABUSE' | 'OTHER'
+
+/** 举报处理状态。 */
+export type FlagStatus = 'PENDING' | 'RESOLVED' | 'DISMISSED'
+
+/** 举报处置结果：驳回举报 / 下架内容 / 禁用用户。 */
+export type FlagHandleResult = 'DISMISS' | 'TAKE_DOWN' | 'DISABLE_USER'
+
+/** 发起举报请求体：理由必填，补充说明可选。 */
+export interface CreateFlagPayload {
+  reason: FlagReason
+  detail?: string
+}
+
+/** 举报视图：含被举报内容摘要、举报人与处置信息。 */
+export interface FlagView {
+  id: number
+  targetType: FlagTargetType
+  targetId: number
+  targetSummary: string | null
+  reason: FlagReason
+  detail: string | null
+  status: FlagStatus
+  handleResult: FlagHandleResult | null
+  reporterId: number
+  reporterNickname: string | null
+  handledBy: number | null
+  handledAt: string | null
+  createdAt: string
+}
+
 /** 审计日志视图：含操作人昵称与目标启事标题。 */
 export interface AuditLogView {
   id: number
