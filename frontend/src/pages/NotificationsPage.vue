@@ -2,6 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { useNotificationStore } from '@/stores/notification'
 import type { NotificationTargetType, NotificationType, NotificationView } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
 const notification = useNotificationStore()
 
@@ -92,9 +95,15 @@ async function onMarkRead(view: NotificationView): Promise<void> {
 
     <p v-if="actionError" class="notifications__error">{{ actionError }}</p>
 
-    <p v-if="loading" class="state">加载中…</p>
-    <p v-else-if="failed" class="state state--error">加载失败，请稍后重试。</p>
-    <p v-else-if="items.length === 0" class="notifications__empty">暂无通知</p>
+    <div v-if="loading" class="skeleton-list">
+      <LoadingSkeleton v-for="n in 3" :key="n" variant="list" :rows="2" />
+    </div>
+    <ErrorState v-else-if="failed" @retry="load" />
+    <EmptyState
+      v-else-if="items.length === 0"
+      title="暂无通知"
+      hint="认领申请与会话消息的动态都会在这里提醒你。"
+    />
     <ul v-else class="notification-list">
       <li
         v-for="view in items"
@@ -197,6 +206,11 @@ async function onMarkRead(view: NotificationView): Promise<void> {
 
 .state--error {
   color: #c0392b;
+}
+
+.skeleton-list {
+  display: grid;
+  gap: 12px;
 }
 
 .notification-list {

@@ -11,6 +11,9 @@ import {
 } from '@/api/admin'
 import type { ReportDetail } from '@/api/types'
 import StatusBadge from '@/components/StatusBadge.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
 /** 复核队列筛选：待复核（PENDING_REVIEW）或全部（空）。 */
 type Filter = 'PENDING_REVIEW' | ''
@@ -157,9 +160,11 @@ async function submitReason(): Promise<void> {
 
     <p v-if="actionError" class="admin-reports__error">{{ actionError }}</p>
 
-    <p v-if="loading" class="state">加载中…</p>
-    <p v-else-if="failed" class="state state--error">加载失败，请稍后重试。</p>
-    <p v-else-if="reports.length === 0" class="admin-reports__empty">暂无启事</p>
+    <div v-if="loading" class="skeleton-list">
+      <LoadingSkeleton v-for="n in 3" :key="n" variant="list" :rows="2" />
+    </div>
+    <ErrorState v-else-if="failed" @retry="load" />
+    <EmptyState v-else-if="reports.length === 0" title="暂无启事" hint="当前筛选条件下没有启事。" />
     <ul v-else class="admin-report-list">
       <li v-for="report in reports" :key="report.id" class="admin-report-card">
         <div class="admin-report-card__head">
@@ -292,6 +297,11 @@ async function submitReason(): Promise<void> {
 
 .state--error {
   color: #c0392b;
+}
+
+.skeleton-list {
+  display: grid;
+  gap: 12px;
 }
 
 .admin-report-list {

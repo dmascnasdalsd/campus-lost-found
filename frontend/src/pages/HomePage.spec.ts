@@ -27,7 +27,10 @@ const oneReport = {
 function makeRouter(): Router {
   return createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/', component: { template: '<div />' } }]
+    routes: [
+      { path: '/', component: { template: '<div />' } },
+      { path: '/reports/new', component: { template: '<div />' } }
+    ]
   })
 }
 
@@ -44,12 +47,14 @@ describe('HomePage', () => {
     listReports.mockReset()
   })
 
-  it('无启事时渲染空状态', async () => {
+  it('无启事时渲染空状态并显示发布引导链接', async () => {
     listReports.mockResolvedValue({ items: [], page: 0, size: 10, total: 0 })
 
     const wrapper = await mountHome(makeRouter())
 
     expect(wrapper.text()).toContain('还没有启事')
+    expect(wrapper.text()).toContain('发布一条失物启事')
+    expect(wrapper.find('.empty-state__action').attributes('href')).toBe('/reports/new')
     expect(wrapper.find('.report-list').exists()).toBe(false)
   })
 
@@ -72,6 +77,32 @@ describe('HomePage', () => {
 
     expect(wrapper.text()).toContain('加载失败')
     expect(wrapper.text()).not.toContain('还没有启事')
+  })
+
+  it('加载中渲染骨架屏而不是空白', async () => {
+    listReports.mockReturnValue(new Promise(() => {}))
+
+    const wrapper = await mountHome(makeRouter())
+
+    expect(wrapper.find('.loading-skeleton').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('加载中…')
+  })
+
+  it('请求失败显示错误态，点重试重新请求并渲染列表', async () => {
+    listReports
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({ items: [oneReport], page: 0, size: 10, total: 1 })
+
+    const wrapper = await mountHome(makeRouter())
+
+    expect(wrapper.find('.error-state').exists()).toBe(true)
+    expect(wrapper.text()).toContain('加载失败')
+
+    await wrapper.find('.error-state__retry').trigger('click')
+    await flushPromises()
+
+    expect(listReports).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.report-card').exists()).toBe(true)
   })
 
   it('进入页面时从 URL query 初始化筛选并据此请求', async () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
@@ -7,6 +7,28 @@ import { useNotificationStore } from '@/stores/notification'
 const auth = useAuthStore()
 const notification = useNotificationStore()
 const router = useRouter()
+
+/** 窄屏判定：≤768px 时导航折叠为「菜单」按钮。 */
+const MOBILE_QUERY = '(max-width: 768px)'
+const isMobile = ref(false)
+const menuOpen = ref(false)
+
+let mediaQuery: MediaQueryList | null = null
+
+function onMediaChange(event: MediaQueryList | MediaQueryListEvent): void {
+  isMobile.value = event.matches
+  // 回到宽屏时收起折叠菜单，避免状态残留。
+  if (!event.matches) {
+    menuOpen.value = false
+  }
+}
+
+// jsdom / 旧环境可能没有 matchMedia：缺失时按桌面处理，避免调用抛错。
+if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+  mediaQuery = window.matchMedia(MOBILE_QUERY)
+  onMediaChange(mediaQuery)
+  mediaQuery.addEventListener('change', onMediaChange)
+}
 
 /** 未读角标轮询：已登录时每 30 秒刷新一次未读数。 */
 const POLL_INTERVAL_MS = 30_000
@@ -48,8 +70,11 @@ watch(
   }
 )
 
-// 组件卸载时停止轮询，避免定时器泄漏。
-onUnmounted(stopPolling)
+// 组件卸载时停止轮询并移除媒体查询监听，避免定时器与监听器泄漏。
+onUnmounted(() => {
+  stopPolling()
+  mediaQuery?.removeEventListener('change', onMediaChange)
+})
 
 async function onLogout(): Promise<void> {
   await auth.logout()
@@ -61,7 +86,20 @@ async function onLogout(): Promise<void> {
   <div class="app">
     <nav class="app__nav">
       <RouterLink class="app__brand" to="/">校园失物招领</RouterLink>
-      <div class="app__actions">
+      <button
+        v-if="isMobile"
+        class="app__menu-toggle"
+        type="button"
+        :aria-expanded="menuOpen"
+        @click="menuOpen = !menuOpen"
+      >
+        菜单
+      </button>
+      <div
+        v-show="!isMobile || menuOpen"
+        class="app__actions"
+        :class="{ 'app__actions--mobile': isMobile }"
+      >
         <template v-if="auth.isAuthenticated">
           <RouterLink class="app__link" to="/me/reports">我的发布</RouterLink>
           <RouterLink class="app__link" to="/me/claims">我的认领</RouterLink>

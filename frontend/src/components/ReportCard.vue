@@ -43,11 +43,13 @@ defineProps<{ report: ReportSummary }>()
 
 .report-card__thumb {
   width: 96px;
-  height: 96px;
+  aspect-ratio: 1 / 1;
+  height: auto;
   border-radius: 6px;
   object-fit: cover;
   flex-shrink: 0;
   background: #f2f3f5;
+  overflow: hidden;
 }
 
 .report-card__thumb--empty {

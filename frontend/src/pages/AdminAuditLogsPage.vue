@@ -2,6 +2,9 @@
 import { onMounted, ref } from 'vue'
 import { listAuditLogs } from '@/api/admin'
 import type { AuditLogView, ReportActionType } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
 const ACTION_LABELS: Record<ReportActionType, string> = {
   APPROVE: '通过',
@@ -65,9 +68,11 @@ function goNext(): void {
       <p class="audit-logs__subtitle">记录所有内容治理动作：操作人、动作、目标启事、原因与时间。</p>
     </header>
 
-    <p v-if="loading" class="state">加载中…</p>
-    <p v-else-if="failed" class="state state--error">加载失败，请稍后重试。</p>
-    <p v-else-if="logs.length === 0" class="audit-logs__empty">暂无审计记录</p>
+    <div v-if="loading" class="skeleton-list">
+      <LoadingSkeleton v-for="n in 3" :key="n" variant="list" :rows="2" />
+    </div>
+    <ErrorState v-else-if="failed" @retry="load" />
+    <EmptyState v-else-if="logs.length === 0" title="暂无审计记录" hint="还没有内容治理动作记录。" />
     <template v-else>
       <ul class="audit-log-list">
         <li v-for="log in logs" :key="log.id" class="audit-log">
@@ -121,6 +126,11 @@ function goNext(): void {
 
 .state--error {
   color: #c0392b;
+}
+
+.skeleton-list {
+  display: grid;
+  gap: 12px;
 }
 
 .audit-log-list {

@@ -8,6 +8,8 @@ import type { ReportSummary, ReportType } from '@/api/types'
 import { REPORT_CATEGORIES, REPORT_LOCATIONS } from '@/constants/vocabulary'
 import ReportCard from '@/components/ReportCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
 const PAGE_SIZE = 10
 const TIME_RANGES: ReportTimeRange[] = ['today', '3d', '7d', '30d', 'custom']
@@ -213,9 +215,16 @@ watch(
       <button class="filters__submit" type="submit">搜索</button>
     </form>
 
-    <p v-if="loading" class="state">加载中…</p>
-    <p v-else-if="failed" class="state state--error">加载失败，请稍后重试。</p>
-    <EmptyState v-else-if="reports.length === 0" />
+    <div v-if="loading" class="skeleton-list">
+      <LoadingSkeleton v-for="n in 3" :key="n" variant="list" :rows="2" />
+    </div>
+    <ErrorState v-else-if="failed" @retry="load" />
+    <EmptyState
+      v-else-if="reports.length === 0"
+      hint="没有找到？发布一条失物启事。"
+      action-text="发布一条失物启事"
+      action-to="/reports/new"
+    />
     <template v-else>
       <ul class="report-list">
         <li v-for="report in reports" :key="report.id">
@@ -353,5 +362,30 @@ watch(
 .pager button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.skeleton-list {
+  display: grid;
+  gap: 12px;
+}
+
+/* 窄屏：筛选表单改单列，控件宽度自适应不溢出。 */
+@media (max-width: 768px) {
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filters__field,
+  .filters__field--grow {
+    width: 100%;
+    flex: 0 0 auto;
+  }
+
+  .filters select,
+  .filters input[type='date'],
+  .filters input[type='search'] {
+    width: 100%;
+  }
 }
 </style>

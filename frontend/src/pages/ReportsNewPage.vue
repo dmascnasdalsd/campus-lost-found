@@ -334,4 +334,20 @@ async function onSubmit(): Promise<void> {
   opacity: 0.6;
   cursor: default;
 }
+
+/* 窄屏：每个字段占满一行，输入控件宽度 100%，避免横向溢出。 */
+@media (max-width: 768px) {
+  .report-form {
+    max-width: 100%;
+  }
+
+  .field__input {
+    width: 100%;
+  }
+
+  .radio-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
 </style>

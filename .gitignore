@@ -8,6 +8,7 @@ backend/target/
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/
+.vite/
 
 # 运行期数据：本地上传的图片
 .data/

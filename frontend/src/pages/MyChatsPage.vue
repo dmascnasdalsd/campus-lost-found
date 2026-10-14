@@ -2,6 +2,9 @@
 import { onMounted, ref } from 'vue'
 import { listChats } from '@/api/chats'
 import type { ChatSessionView, ChatSessionStatus } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
 const sessions = ref<ChatSessionView[]>([])
 const loading = ref(true)
@@ -36,9 +39,11 @@ async function load(): Promise<void> {
       <p class="my-chats__subtitle">与认领对方约定线下交还的站内会话。</p>
     </header>
 
-    <p v-if="loading" class="state">加载中…</p>
-    <p v-else-if="failed" class="state state--error">加载失败，请稍后重试。</p>
-    <p v-else-if="sessions.length === 0" class="my-chats__empty">暂无会话</p>
+    <div v-if="loading" class="skeleton-list">
+      <LoadingSkeleton v-for="n in 3" :key="n" variant="list" :rows="2" />
+    </div>
+    <ErrorState v-else-if="failed" @retry="load" />
+    <EmptyState v-else-if="sessions.length === 0" title="暂无会话" hint="还没有与认领对方建立会话。" />
     <ul v-else class="chat-list">
       <li v-for="session in sessions" :key="session.id" class="chat-card">
         <RouterLink class="chat-card__link" :to="`/me/chats/${session.id}`">
@@ -76,6 +81,11 @@ async function load(): Promise<void> {
 
 .state--error {
   color: #c0392b;
+}
+
+.skeleton-list {
+  display: grid;
+  gap: 12px;
 }
 
 .my-chats__empty {

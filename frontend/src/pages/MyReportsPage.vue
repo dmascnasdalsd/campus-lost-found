@@ -12,6 +12,8 @@ import type { Custody, ReportSummary, ReportType, UpdateReportPayload } from '@/
 import { REPORT_CATEGORIES, REPORT_LOCATIONS } from '@/constants/vocabulary'
 import StatusBadge from '@/components/StatusBadge.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
 /** 发布后可编辑 / 删除的时间窗。 */
 const EDIT_WINDOW_MS = 30 * 60 * 1000
@@ -227,9 +229,17 @@ async function confirmHandover(report: ReportSummary): Promise<void> {
 
     <p v-if="actionError" class="my-reports__error">{{ actionError }}</p>
 
-    <p v-if="loading" class="state">加载中…</p>
-    <p v-else-if="failed" class="state state--error">加载失败，请稍后重试。</p>
-    <EmptyState v-else-if="reports.length === 0" />
+    <div v-if="loading" class="skeleton-list">
+      <LoadingSkeleton v-for="n in 3" :key="n" variant="list" :rows="2" />
+    </div>
+    <ErrorState v-else-if="failed" @retry="load" />
+    <EmptyState
+      v-else-if="reports.length === 0"
+      title="还没有发布"
+      hint="发布一条启事，让大家帮你一起找。"
+      action-text="发布启事"
+      action-to="/reports/new"
+    />
     <template v-else>
       <ul class="my-reports__list">
         <li v-for="report in reports" :key="report.id" class="my-report-card">
@@ -358,6 +368,19 @@ async function confirmHandover(report: ReportSummary): Promise<void> {
 
 .state--error {
   color: #c0392b;
+}
+
+.skeleton-list {
+  display: grid;
+  gap: 12px;
+}
+
+/* 窄屏：编辑表单控件占满一行，避免横向溢出。 */
+@media (max-width: 768px) {
+  .field__input,
+  .handover-no {
+    width: 100%;
+  }
 }
 
 .my-reports__list {

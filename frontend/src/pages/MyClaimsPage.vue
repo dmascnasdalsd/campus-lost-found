@@ -4,6 +4,9 @@ import { ApiError } from '@/api/client'
 import { listClaims, withdrawClaim, acceptClaim, rejectClaim } from '@/api/claims'
 import type { ClaimRole } from '@/api/claims'
 import type { ClaimStatus, ClaimView } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
 const tab = ref<ClaimRole>('applied')
 const claims = ref<ClaimView[]>([])
@@ -140,9 +143,15 @@ async function submitReject(): Promise<void> {
 
     <p v-if="actionError" class="my-claims__error">{{ actionError }}</p>
 
-    <p v-if="loading" class="state">加载中…</p>
-    <p v-else-if="failed" class="state state--error">加载失败，请稍后重试。</p>
-    <p v-else-if="claims.length === 0" class="my-claims__empty">暂无认领申请</p>
+    <div v-if="loading" class="skeleton-list">
+      <LoadingSkeleton v-for="n in 3" :key="n" variant="list" :rows="2" />
+    </div>
+    <ErrorState v-else-if="failed" @retry="load" />
+    <EmptyState
+      v-else-if="claims.length === 0"
+      title="暂无认领申请"
+      hint="还没有相关的认领申请。"
+    />
     <ul v-else class="claim-list">
       <li v-for="claim in claims" :key="claim.id" class="claim-card">
         <div class="claim-card__head">
@@ -282,6 +291,11 @@ async function submitReject(): Promise<void> {
 
 .state--error {
   color: #c0392b;
+}
+
+.skeleton-list {
+  display: grid;
+  gap: 12px;
 }
 
 .claim-list {

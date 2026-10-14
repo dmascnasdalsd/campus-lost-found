@@ -3,6 +3,9 @@ import { onMounted, ref } from 'vue'
 import { ApiError } from '@/api/client'
 import { listAdminFlags, resolveFlag } from '@/api/admin'
 import type { FlagHandleResult, FlagReason, FlagStatus, FlagTargetType, FlagView } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
 /** 举报列表筛选：待处理（PENDING）或全部（空）。 */
 type Filter = 'PENDING' | ''
@@ -110,9 +113,11 @@ function resultLabel(flag: FlagView): string {
 
     <p v-if="actionError" class="admin-flags__error">{{ actionError }}</p>
 
-    <p v-if="loading" class="state">加载中…</p>
-    <p v-else-if="failed" class="state state--error">加载失败，请稍后重试。</p>
-    <p v-else-if="flags.length === 0" class="admin-flags__empty">暂无举报</p>
+    <div v-if="loading" class="skeleton-list">
+      <LoadingSkeleton v-for="n in 3" :key="n" variant="list" :rows="2" />
+    </div>
+    <ErrorState v-else-if="failed" @retry="load" />
+    <EmptyState v-else-if="flags.length === 0" title="暂无举报" hint="当前筛选条件下没有举报。" />
     <ul v-else class="flag-list">
       <li v-for="flag in flags" :key="flag.id" class="flag-card">
         <div class="flag-card__head">
@@ -210,6 +215,11 @@ function resultLabel(flag: FlagView): string {
 
 .state--error {
   color: #c0392b;
+}
+
+.skeleton-list {
+  display: grid;
+  gap: 12px;
 }
 
 .flag-list {

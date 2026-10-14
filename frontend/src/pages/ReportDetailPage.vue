@@ -8,6 +8,8 @@ import { createReportFlag } from '@/api/flags'
 import type { FlagReason, ReportDetail } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import StatusBadge from '@/components/StatusBadge.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -179,8 +181,12 @@ onMounted(load)
 
 <template>
   <section class="report-detail">
-    <p v-if="loading" class="state">加载中…</p>
-    <p v-else-if="failed" class="state state--error">启事不存在或加载失败。</p>
+    <LoadingSkeleton v-if="loading" variant="detail" :rows="3" />
+    <ErrorState
+      v-else-if="failed"
+      message="启事不存在或加载失败，请稍后重试。"
+      @retry="load"
+    />
 
     <article v-else-if="report" class="report-detail__body">
       <header class="report-detail__header">
@@ -375,6 +381,24 @@ onMounted(load)
 
 .state--error {
   color: #c0392b;
+}
+
+/* 窄屏：详情大图按容器自适应，事实列表改单列不横向溢出。 */
+@media (max-width: 768px) {
+  .gallery__img {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: none;
+  }
+
+  .report-detail__facts {
+    grid-template-columns: 1fr;
+  }
+
+  .report-detail__facts dt {
+    margin-top: 6px;
+  }
 }
 
 .report-detail__title {

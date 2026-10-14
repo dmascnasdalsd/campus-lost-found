@@ -192,3 +192,47 @@ describe('ReportDetailPage 举报', () => {
     expect(wrapper.find('.flag__login').exists()).toBe(true)
   })
 })
+
+describe('ReportDetailPage 加载与错误态', () => {
+  beforeEach(() => {
+    getReport.mockReset()
+    createClaim.mockReset()
+    createReportFlag.mockReset()
+    localStorage.clear()
+  })
+
+  async function mountUnset() {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const router = createRouter({ history: createMemoryHistory(), routes })
+    await router.push('/reports/1')
+    await router.isReady()
+    const wrapper = mount(ReportDetailPage, { global: { plugins: [pinia, router] } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('加载中渲染骨架屏而不是空白', async () => {
+    getReport.mockReturnValue(new Promise(() => {}))
+
+    const wrapper = await mountUnset()
+
+    expect(wrapper.find('.loading-skeleton').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('加载中…')
+  })
+
+  it('加载失败显示错误态，点重试重新拉取详情', async () => {
+    getReport.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(detail())
+
+    const wrapper = await mountUnset()
+
+    expect(wrapper.find('.error-state').exists()).toBe(true)
+    expect(wrapper.text()).toContain('加载失败')
+
+    await wrapper.find('.error-state__retry').trigger('click')
+    await flushPromises()
+
+    expect(getReport).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('捡到的校园卡')
+  })
+})

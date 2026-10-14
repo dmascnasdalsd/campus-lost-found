@@ -2,6 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { exportReportsCsv, getAdminStats } from '@/api/admin'
 import type { AdminStatsView, NameCountView } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
 /** 统计窗口：周（最近 7 天）或月（最近 30 天）。 */
 type Range = 'week' | 'month'
@@ -92,10 +95,10 @@ function barWidth(count: number, max: number): string {
       </button>
     </div>
 
-    <p v-if="loading" class="state">加载中…</p>
-    <p v-else-if="failed" class="state state--error">加载失败，请稍后重试。</p>
+    <LoadingSkeleton v-if="loading" variant="detail" :rows="3" />
+    <ErrorState v-else-if="failed" @retry="load" />
     <template v-else-if="stats">
-      <p v-if="!hasData" class="admin-stats__empty">暂无统计数据</p>
+      <EmptyState v-if="!hasData" title="暂无统计数据" hint="当前时间范围内还没有启事数据。" />
       <template v-else>
         <div class="stat-cards">
           <div class="stat-card stat-card--total">
@@ -352,5 +355,25 @@ function barWidth(count: number, max: number): string {
 .distribution__count {
   text-align: right;
   color: #1a1a1a;
+}
+
+/* 窄屏：卡片与分布改单列，避免横向溢出。 */
+@media (max-width: 768px) {
+  .stat-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .distribution__item {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-item {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .daily-item__date {
+    min-width: 0;
+  }
 }
 </style>

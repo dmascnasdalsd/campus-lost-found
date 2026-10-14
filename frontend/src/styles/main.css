@@ -7,6 +7,8 @@ body {
   background: #f5f6f8;
   color: #1f2329;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  /* 兜底：避免窄屏下出现横向滚动。 */
+  overflow-x: hidden;
 }
 
 .app__nav {
@@ -49,4 +51,53 @@ body {
   max-width: 720px;
   margin: 0 auto;
   padding: 24px 16px 48px;
+}
+
+.app__menu-toggle {
+  padding: 6px 14px;
+  border: 1px solid #d9dbe0;
+  border-radius: 6px;
+  background: #fff;
+  color: #2e7d32;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* 窄屏（≤768px）：导航折叠、容器内边距缩小，长文本与图片自适应不溢出。 */
+@media (max-width: 768px) {
+  .app__nav {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .app__actions--mobile {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    gap: 10px;
+    padding: 12px 0 4px;
+    border-top: 1px solid #e4e6eb;
+  }
+
+  .app__main {
+    padding: 16px 12px 40px;
+  }
+
+  img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  p,
+  dd,
+  li,
+  span {
+    overflow-wrap: anywhere;
+  }
 }
