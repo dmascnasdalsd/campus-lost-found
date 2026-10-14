@@ -1,6 +1,7 @@
 package com.campus.lostfound.repository;
 
 import com.campus.lostfound.entity.Report;
+import com.campus.lostfound.entity.ReportStatus;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,4 +12,7 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
 
     /** 某用户发布的全部启事（含终态），排序由调用方通过 Pageable 指定。 */
     Page<Report> findByPublisherId(Long publisherId, Pageable pageable);
+
+    /** 管理端复核队列：按状态过滤，排序由调用方通过 Pageable 指定。 */
+    Page<Report> findByStatus(ReportStatus status, Pageable pageable);
 }

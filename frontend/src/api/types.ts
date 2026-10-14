@@ -174,6 +174,21 @@ export interface SendMessageRequest {
   body: string
 }
 
+/** 管理员内容治理动作类型。 */
+export type ReportActionType = 'APPROVE' | 'REJECT' | 'TAKE_DOWN' | 'PIN' | 'UNPIN'
+
+/** 审计日志视图：含操作人昵称与目标启事标题。 */
+export interface AuditLogView {
+  id: number
+  operatorId: number
+  operatorNickname: string | null
+  action: ReportActionType
+  reportId: number
+  reportTitle: string | null
+  reason: string | null
+  createdAt: string
+}
+
 export type UserRole = 'USER' | 'ADMIN'
 
 export type UserStatus = 'ACTIVE' | 'DISABLED'

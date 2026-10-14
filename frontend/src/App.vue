@@ -37,6 +37,9 @@ async function onLogout(): Promise<void> {
           <RouterLink class="app__link" to="/me/reports">我的发布</RouterLink>
           <RouterLink class="app__link" to="/me/claims">我的认领</RouterLink>
           <RouterLink class="app__link" to="/me/chats">我的会话</RouterLink>
+          <RouterLink v-if="auth.user?.role === 'ADMIN'" class="app__link" to="/admin/reports">
+            管理后台
+          </RouterLink>
           <span class="app__user">{{ auth.user?.nickname ?? '已登录' }}</span>
           <button class="app__link" type="button" @click="onLogout">退出登录</button>
         </template>
