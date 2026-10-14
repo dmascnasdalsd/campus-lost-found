@@ -1,7 +1,8 @@
 package com.campus.lostfound.report;
 
-import com.campus.lostfound.auth.JwtService;
-import com.campus.lostfound.auth.UserRole;
+import com.campus.lostfound.entity.UserRole;
+import com.campus.lostfound.service.JwtService;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
