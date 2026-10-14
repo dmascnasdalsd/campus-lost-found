@@ -174,6 +174,35 @@ export interface SendMessageRequest {
   body: string
 }
 
+/** 站内通知的业务类型。 */
+export type NotificationType =
+  | 'CLAIM_CREATED'
+  | 'CLAIM_ACCEPTED'
+  | 'CLAIM_REJECTED'
+  | 'CLAIM_CLOSED'
+  | 'MESSAGE_RECEIVED'
+  | 'REPORT_TAKE_DOWN'
+  | 'REPORT_REJECTED'
+
+/** 通知关联对象的类型。 */
+export type NotificationTargetType = 'REPORT' | 'CLAIM' | 'SESSION'
+
+/** 单条通知视图：含类型、关联对象、已读标记与时间。 */
+export interface NotificationView {
+  id: number
+  type: NotificationType
+  targetType: NotificationTargetType | null
+  targetId: number | null
+  read: boolean
+  createdAt: string
+}
+
+/** 通知列表视图：通知条目与当前未读数。 */
+export interface NotificationListView {
+  items: NotificationView[]
+  unreadCount: number
+}
+
 /** 管理员内容治理动作类型。 */
 export type ReportActionType = 'APPROVE' | 'REJECT' | 'TAKE_DOWN' | 'PIN' | 'UNPIN'
 

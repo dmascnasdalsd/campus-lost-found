@@ -8,6 +8,8 @@ import com.campus.lostfound.entity.ChatSessionStatus;
 import com.campus.lostfound.entity.Claim;
 import com.campus.lostfound.entity.ClaimDirection;
 import com.campus.lostfound.entity.ClaimStatus;
+import com.campus.lostfound.entity.NotificationTargetType;
+import com.campus.lostfound.entity.NotificationType;
 import com.campus.lostfound.entity.Report;
 import com.campus.lostfound.entity.ReportStatus;
 import com.campus.lostfound.entity.ReportType;
@@ -47,15 +49,18 @@ public class ClaimService {
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
     private final ChatSessionRepository chatSessionRepository;
+    private final NotificationService notificationService;
 
     public ClaimService(ClaimRepository claimRepository,
                         ReportRepository reportRepository,
                         UserRepository userRepository,
-                        ChatSessionRepository chatSessionRepository) {
+                        ChatSessionRepository chatSessionRepository,
+                        NotificationService notificationService) {
         this.claimRepository = claimRepository;
         this.reportRepository = reportRepository;
         this.userRepository = userRepository;
         this.chatSessionRepository = chatSessionRepository;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -89,7 +94,11 @@ public class ClaimService {
         claim.setExpectPlace(trimToNull(request.expectPlace()));
         claim.setStatus(ClaimStatus.PENDING);
 
-        return toView(claimRepository.save(claim));
+        Claim saved = claimRepository.save(claim);
+        // 通知启事发布者：有新的认领申请。
+        notificationService.notify(report.getPublisherId(), NotificationType.CLAIM_CREATED,
+                NotificationTargetType.CLAIM, saved.getId());
+        return toView(saved);
     }
 
     /**
@@ -145,6 +154,9 @@ public class ClaimService {
         claim.setHandledBy(userId);
         claim.setHandledAt(now);
         Claim saved = claimRepository.save(claim);
+        // 通知申请人：其认领申请已被接受。
+        notificationService.notify(claim.getApplicantId(), NotificationType.CLAIM_ACCEPTED,
+                NotificationTargetType.CLAIM, saved.getId());
 
         report.setStatus(ReportStatus.CLAIMING);
         reportRepository.save(report);
@@ -156,6 +168,9 @@ public class ClaimService {
                     other.setHandledBy(userId);
                     other.setHandledAt(now);
                     claimRepository.save(other);
+                    // 通知被自动关闭的其他申请人。
+                    notificationService.notify(other.getApplicantId(), NotificationType.CLAIM_CLOSED,
+                            NotificationTargetType.CLAIM, other.getId());
                 });
 
         createChatSession(saved, report);
@@ -186,7 +201,11 @@ public class ClaimService {
         claim.setHandledBy(userId);
         claim.setHandledAt(LocalDateTime.now());
         claim.setRejectReason(reason);
-        return toView(claimRepository.save(claim));
+        Claim saved = claimRepository.save(claim);
+        // 通知申请人：其认领申请已被驳回。
+        notificationService.notify(claim.getApplicantId(), NotificationType.CLAIM_REJECTED,
+                NotificationTargetType.CLAIM, saved.getId());
+        return toView(saved);
     }
 
     /** 仅启事发布者本人或管理员可处理认领申请。 */

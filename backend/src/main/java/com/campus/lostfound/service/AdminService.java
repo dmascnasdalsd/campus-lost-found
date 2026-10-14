@@ -4,6 +4,8 @@ import com.campus.lostfound.dto.AuditLogView;
 import com.campus.lostfound.dto.PageResult;
 import com.campus.lostfound.dto.PublisherSummary;
 import com.campus.lostfound.dto.ReportDetail;
+import com.campus.lostfound.entity.NotificationTargetType;
+import com.campus.lostfound.entity.NotificationType;
 import com.campus.lostfound.entity.Report;
 import com.campus.lostfound.entity.ReportAction;
 import com.campus.lostfound.entity.ReportActionType;
@@ -36,13 +38,16 @@ public class AdminService {
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
     private final ReportActionRepository reportActionRepository;
+    private final NotificationService notificationService;
 
     public AdminService(ReportRepository reportRepository,
                         UserRepository userRepository,
-                        ReportActionRepository reportActionRepository) {
+                        ReportActionRepository reportActionRepository,
+                        NotificationService notificationService) {
         this.reportRepository = reportRepository;
         this.userRepository = userRepository;
         this.reportActionRepository = reportActionRepository;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -86,7 +91,11 @@ public class AdminService {
         report.setReviewedAt(LocalDateTime.now());
         report.setRejectReason(normalized);
         record(adminId, ReportActionType.REJECT, reportId, normalized);
-        return toDetail(reportRepository.save(report));
+        Report saved = reportRepository.save(report);
+        // 通知发布者：其启事被驳回。
+        notificationService.notify(saved.getPublisherId(), NotificationType.REPORT_REJECTED,
+                NotificationTargetType.REPORT, reportId);
+        return toDetail(saved);
     }
 
     /** 下架：置为 OFFLINE（原因必填），记录审计。 */
@@ -98,7 +107,11 @@ public class AdminService {
         report.setReviewedBy(adminId);
         report.setReviewedAt(LocalDateTime.now());
         record(adminId, ReportActionType.TAKE_DOWN, reportId, normalized);
-        return toDetail(reportRepository.save(report));
+        Report saved = reportRepository.save(report);
+        // 通知发布者：其启事被下架。
+        notificationService.notify(saved.getPublisherId(), NotificationType.REPORT_TAKE_DOWN,
+                NotificationTargetType.REPORT, reportId);
+        return toDetail(saved);
     }
 
     /** 置顶：pinned=true，记录审计。 */

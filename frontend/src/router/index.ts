@@ -9,6 +9,7 @@ import MyReportsPage from '@/pages/MyReportsPage.vue'
 import MyClaimsPage from '@/pages/MyClaimsPage.vue'
 import MyChatsPage from '@/pages/MyChatsPage.vue'
 import ChatPage from '@/pages/ChatPage.vue'
+import NotificationsPage from '@/pages/NotificationsPage.vue'
 import AdminReportsPage from '@/pages/AdminReportsPage.vue'
 import AdminAuditLogsPage from '@/pages/AdminAuditLogsPage.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -62,6 +63,12 @@ export const routes: RouteRecordRaw[] = [
     path: '/me/chats/:id',
     name: 'chat',
     component: ChatPage,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/notifications',
+    name: 'notifications',
+    component: NotificationsPage,
     meta: { requiresAuth: true }
   },
   {

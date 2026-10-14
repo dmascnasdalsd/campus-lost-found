@@ -6,6 +6,8 @@ import com.campus.lostfound.dto.ReportSummary;
 import com.campus.lostfound.entity.ChatSession;
 import com.campus.lostfound.entity.ChatSessionStatus;
 import com.campus.lostfound.entity.Message;
+import com.campus.lostfound.entity.NotificationTargetType;
+import com.campus.lostfound.entity.NotificationType;
 import com.campus.lostfound.entity.Report;
 import com.campus.lostfound.entity.User;
 import com.campus.lostfound.exception.BusinessException;
@@ -33,15 +35,18 @@ public class ChatService {
     private final MessageRepository messageRepository;
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     public ChatService(ChatSessionRepository chatSessionRepository,
                        MessageRepository messageRepository,
                        ReportRepository reportRepository,
-                       UserRepository userRepository) {
+                       UserRepository userRepository,
+                       NotificationService notificationService) {
         this.chatSessionRepository = chatSessionRepository;
         this.messageRepository = messageRepository;
         this.reportRepository = reportRepository;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -117,6 +122,13 @@ public class ChatService {
         message.setSenderId(userId);
         message.setBody(body.trim());
         Message saved = messageRepository.save(message);
+
+        // 通知会话另一方：收到新消息。
+        Long peerId = session.getOwnerId().equals(userId)
+                ? session.getApplicantId()
+                : session.getOwnerId();
+        notificationService.notify(peerId, NotificationType.MESSAGE_RECEIVED,
+                NotificationTargetType.SESSION, sessionId);
 
         String nickname = userRepository.findById(userId).map(User::getNickname).orElse(null);
         return MessageView.from(saved, nickname);

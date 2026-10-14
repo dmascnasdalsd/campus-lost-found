@@ -1,15 +1,38 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notification'
 
 const auth = useAuthStore()
+const notification = useNotificationStore()
 const router = useRouter()
 
-// token 变化（含刷新后从 localStorage 恢复）时刷新当前用户信息。
+/** 未读角标轮询：已登录时每 30 秒刷新一次未读数。 */
+const POLL_INTERVAL_MS = 30_000
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+function startPolling(): void {
+  void notification.fetchUnread()
+  if (pollTimer === null) {
+    pollTimer = setInterval(() => {
+      void notification.fetchUnread()
+    }, POLL_INTERVAL_MS)
+  }
+}
+
+function stopPolling(): void {
+  if (pollTimer !== null) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+// token 变化（含刷新后从 localStorage 恢复）时刷新当前用户信息并启停角标轮询。
 onMounted(() => {
   if (auth.isAuthenticated) {
     void auth.fetchMe()
+    startPolling()
   }
 })
 
@@ -18,9 +41,15 @@ watch(
   (token) => {
     if (token) {
       void auth.fetchMe()
+      startPolling()
+    } else {
+      stopPolling()
     }
   }
 )
+
+// 组件卸载时停止轮询，避免定时器泄漏。
+onUnmounted(stopPolling)
 
 async function onLogout(): Promise<void> {
   await auth.logout()
@@ -37,6 +66,12 @@ async function onLogout(): Promise<void> {
           <RouterLink class="app__link" to="/me/reports">我的发布</RouterLink>
           <RouterLink class="app__link" to="/me/claims">我的认领</RouterLink>
           <RouterLink class="app__link" to="/me/chats">我的会话</RouterLink>
+          <RouterLink class="app__link app__notification" to="/notifications">
+            通知
+            <span v-if="notification.unreadCount > 0" class="app__notification-badge">
+              {{ notification.unreadCount }}
+            </span>
+          </RouterLink>
           <RouterLink v-if="auth.user?.role === 'ADMIN'" class="app__link" to="/admin/reports">
             管理后台
           </RouterLink>
@@ -54,3 +89,16 @@ async function onLogout(): Promise<void> {
     </main>
   </div>
 </template>
+
+<style scoped>
+.app__notification-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: #c0392b;
+  color: #fff;
+  font-size: 12px;
+  line-height: 18px;
+}
+</style>
