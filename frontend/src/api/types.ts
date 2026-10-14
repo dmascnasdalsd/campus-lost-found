@@ -140,6 +140,40 @@ export interface CreateClaimRequest {
   expectPlace?: string
 }
 
+/** 驳回认领申请请求体：驳回原因必填。 */
+export interface RejectClaimPayload {
+  rejectReason: string
+}
+
+/** 站内会话状态：OPEN 进行中，CLOSED 已关闭。 */
+export type ChatSessionStatus = 'OPEN' | 'CLOSED'
+
+/** 会话视图：含关联启事摘要与对方昵称。 */
+export interface ChatSessionView {
+  id: number
+  reportId: number
+  report: ReportSummary | null
+  peerNickname: string | null
+  status: ChatSessionStatus
+  createdAt: string
+  closedAt: string | null
+}
+
+/** 会话消息视图：含发送者昵称。 */
+export interface MessageView {
+  id: number
+  sessionId: number
+  senderId: number
+  senderNickname: string | null
+  body: string
+  createdAt: string
+}
+
+/** 发送消息请求体。 */
+export interface SendMessageRequest {
+  body: string
+}
+
 export type UserRole = 'USER' | 'ADMIN'
 
 export type UserStatus = 'ACTIVE' | 'DISABLED'

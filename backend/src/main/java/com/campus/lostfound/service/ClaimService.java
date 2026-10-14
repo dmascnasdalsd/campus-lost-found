@@ -3,6 +3,8 @@ package com.campus.lostfound.service;
 import com.campus.lostfound.dto.ClaimView;
 import com.campus.lostfound.dto.CreateClaimRequest;
 import com.campus.lostfound.dto.ReportSummary;
+import com.campus.lostfound.entity.ChatSession;
+import com.campus.lostfound.entity.ChatSessionStatus;
 import com.campus.lostfound.entity.Claim;
 import com.campus.lostfound.entity.ClaimDirection;
 import com.campus.lostfound.entity.ClaimStatus;
@@ -11,6 +13,7 @@ import com.campus.lostfound.entity.ReportStatus;
 import com.campus.lostfound.entity.ReportType;
 import com.campus.lostfound.entity.User;
 import com.campus.lostfound.exception.BusinessException;
+import com.campus.lostfound.repository.ChatSessionRepository;
 import com.campus.lostfound.repository.ClaimRepository;
 import com.campus.lostfound.repository.ReportRepository;
 import com.campus.lostfound.repository.UserRepository;
@@ -18,6 +21,7 @@ import com.campus.lostfound.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -42,13 +46,16 @@ public class ClaimService {
     private final ClaimRepository claimRepository;
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
+    private final ChatSessionRepository chatSessionRepository;
 
     public ClaimService(ClaimRepository claimRepository,
                         ReportRepository reportRepository,
-                        UserRepository userRepository) {
+                        UserRepository userRepository,
+                        ChatSessionRepository chatSessionRepository) {
         this.claimRepository = claimRepository;
         this.reportRepository = reportRepository;
         this.userRepository = userRepository;
+        this.chatSessionRepository = chatSessionRepository;
     }
 
     /**
@@ -116,6 +123,99 @@ public class ClaimService {
 
         claim.setStatus(ClaimStatus.WITHDRAWN);
         return toView(claimRepository.save(claim));
+    }
+
+    /**
+     * 接受认领申请：仅启事发布者或管理员可操作，且仅 PENDING 状态可接受。
+     * 接受后该申请变为 ACCEPTED，启事进入 CLAIMING，同启事下其他 PENDING 申请关闭，
+     * 并创建只对双方可见的站内会话。
+     */
+    @Transactional
+    public ClaimView accept(Long userId, boolean admin, Long claimId) {
+        Claim claim = claimRepository.findById(claimId)
+                .orElseThrow(() -> BusinessException.notFound("认领申请不存在"));
+        Report report = reportRepository.findById(claim.getReportId())
+                .orElseThrow(() -> BusinessException.notFound("启事不存在"));
+
+        ensureHandler(report, userId, admin);
+        ensurePending(claim);
+
+        LocalDateTime now = LocalDateTime.now();
+        claim.setStatus(ClaimStatus.ACCEPTED);
+        claim.setHandledBy(userId);
+        claim.setHandledAt(now);
+        Claim saved = claimRepository.save(claim);
+
+        report.setStatus(ReportStatus.CLAIMING);
+        reportRepository.save(report);
+
+        // 同一启事下其他待处理申请自动关闭，避免重复交还。
+        claimRepository.findByReportIdAndStatus(report.getId(), ClaimStatus.PENDING)
+                .forEach(other -> {
+                    other.setStatus(ClaimStatus.CLOSED);
+                    other.setHandledBy(userId);
+                    other.setHandledAt(now);
+                    claimRepository.save(other);
+                });
+
+        createChatSession(saved, report);
+
+        return toView(saved);
+    }
+
+    /**
+     * 驳回认领申请：仅启事发布者或管理员可操作，且仅 PENDING 状态可驳回；必须填写拒绝原因。
+     * 驳回后申请人可重新发起申请（重复校验只看 PENDING / ACCEPTED）。
+     */
+    @Transactional
+    public ClaimView reject(Long userId, boolean admin, Long claimId, String rejectReason) {
+        String reason = trimToNull(rejectReason);
+        if (reason == null) {
+            throw BusinessException.invalidParam("rejectReason：请填写驳回原因");
+        }
+
+        Claim claim = claimRepository.findById(claimId)
+                .orElseThrow(() -> BusinessException.notFound("认领申请不存在"));
+        Report report = reportRepository.findById(claim.getReportId())
+                .orElseThrow(() -> BusinessException.notFound("启事不存在"));
+
+        ensureHandler(report, userId, admin);
+        ensurePending(claim);
+
+        claim.setStatus(ClaimStatus.REJECTED);
+        claim.setHandledBy(userId);
+        claim.setHandledAt(LocalDateTime.now());
+        claim.setRejectReason(reason);
+        return toView(claimRepository.save(claim));
+    }
+
+    /** 仅启事发布者本人或管理员可处理认领申请。 */
+    private void ensureHandler(Report report, Long userId, boolean admin) {
+        if (!admin && !report.getPublisherId().equals(userId)) {
+            throw BusinessException.forbidden("只能处理自己发布的启事上的认领申请");
+        }
+    }
+
+    /** 已处理的申请不能重复接受 / 驳回。 */
+    private void ensurePending(Claim claim) {
+        if (claim.getStatus() != ClaimStatus.PENDING) {
+            throw BusinessException.conflict("该申请已被处理，无法再次操作");
+        }
+    }
+
+    /** 为该已接受的申请创建唯一会话（幂等：已存在则不重复创建）。 */
+    private void createChatSession(Claim claim, Report report) {
+        if (chatSessionRepository.findByClaimId(claim.getId()).isPresent()) {
+            return;
+        }
+        ChatSession session = new ChatSession();
+        session.setClaimId(claim.getId());
+        session.setReportId(report.getId());
+        session.setOwnerId(report.getPublisherId());
+        session.setApplicantId(claim.getApplicantId());
+        session.setStatus(ChatSessionStatus.OPEN);
+        session.setClosedAt(null);
+        chatSessionRepository.save(session);
     }
 
     /** 单条视图：装配关联启事摘要与申请人昵称。 */

@@ -23,4 +23,7 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
     @Query("select c from Claim c, Report r where c.reportId = r.id and r.publisherId = :publisherId "
             + "order by c.createdAt desc")
     List<Claim> findReceivedByPublisherId(@Param("publisherId") Long publisherId);
+
+    /** 某启事下指定状态的申请，用于接受时关闭其他待处理申请、交还完成时关闭已接受申请。 */
+    List<Claim> findByReportIdAndStatus(Long reportId, ClaimStatus status);
 }

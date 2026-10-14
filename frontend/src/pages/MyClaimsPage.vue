@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ApiError } from '@/api/client'
-import { listClaims, withdrawClaim } from '@/api/claims'
+import { listClaims, withdrawClaim, acceptClaim, rejectClaim } from '@/api/claims'
 import type { ClaimRole } from '@/api/claims'
 import type { ClaimStatus, ClaimView } from '@/api/types'
 
@@ -10,6 +10,12 @@ const claims = ref<ClaimView[]>([])
 const loading = ref(true)
 const failed = ref(false)
 const actionError = ref('')
+
+// 驳回弹窗状态：目标申请、原因输入、行内校验错误与提交中标记。
+const rejectingClaim = ref<ClaimView | null>(null)
+const rejectReason = ref('')
+const rejectError = ref('')
+const rejecting = ref(false)
 
 const CLAIM_STATUS_LABELS: Record<ClaimStatus, string> = {
   PENDING: '待处理',
@@ -52,6 +58,56 @@ async function onWithdraw(claim: ClaimView): Promise<void> {
     await load()
   } catch (error) {
     actionError.value = error instanceof ApiError ? error.message : '撤回失败，请稍后重试'
+  }
+}
+
+/** 接受认领申请：确认后调用接受接口并重新加载（同启事其他待处理申请会被关闭）。 */
+async function onAccept(claim: ClaimView): Promise<void> {
+  if (!window.confirm('确认接受这条认领申请？接受后同一启事的其他待处理申请会被自动关闭。')) {
+    return
+  }
+  actionError.value = ''
+  try {
+    await acceptClaim(claim.id)
+    await load()
+  } catch (error) {
+    actionError.value = error instanceof ApiError ? error.message : '接受失败，请稍后重试'
+  }
+}
+
+/** 打开驳回弹窗，重置原因与错误。 */
+function openReject(claim: ClaimView): void {
+  rejectingClaim.value = claim
+  rejectReason.value = ''
+  rejectError.value = ''
+}
+
+/** 关闭驳回弹窗。 */
+function closeReject(): void {
+  rejectingClaim.value = null
+  rejectReason.value = ''
+  rejectError.value = ''
+}
+
+/** 提交驳回：原因必填，成功后关闭弹窗并重新加载。 */
+async function submitReject(): Promise<void> {
+  if (!rejectingClaim.value) {
+    return
+  }
+  if (rejectReason.value.trim() === '') {
+    rejectError.value = '请填写驳回原因'
+    return
+  }
+  rejecting.value = true
+  rejectError.value = ''
+  try {
+    await rejectClaim(rejectingClaim.value.id, { rejectReason: rejectReason.value.trim() })
+    closeReject()
+    await load()
+  } catch (error) {
+    rejectError.value = error instanceof ApiError ? error.message : '驳回失败，请稍后重试'
+  } finally {
+    rejecting.value = false
   }
 }
 </script>
@@ -123,7 +179,7 @@ async function onWithdraw(claim: ClaimView): Promise<void> {
           <span v-if="claim.expectPlace">期望地点：{{ claim.expectPlace }}</span>
         </p>
 
-        <p v-if="claim.status === 'REJECTED' && claim.rejectReason" class="claim-card__reject">
+        <p v-if="claim.status === 'REJECTED' && claim.rejectReason" class="claim-card__reject-reason">
           驳回原因：{{ claim.rejectReason }}
         </p>
 
@@ -135,8 +191,40 @@ async function onWithdraw(claim: ClaimView): Promise<void> {
         >
           撤回
         </button>
+
+        <div
+          v-if="tab === 'received' && claim.status === 'PENDING'"
+          class="claim-card__actions"
+        >
+          <button class="claim-card__accept" type="button" @click="onAccept(claim)">接受</button>
+          <button class="claim-card__reject" type="button" @click="openReject(claim)">拒绝</button>
+        </div>
       </li>
     </ul>
+
+    <div v-if="rejectingClaim" class="reject-modal" role="dialog">
+      <div class="reject-modal__box">
+        <h2 class="reject-modal__title">驳回认领申请</h2>
+        <textarea
+          v-model="rejectReason"
+          class="reject-modal__reason"
+          rows="3"
+          placeholder="请填写驳回原因（申请人可见）"
+        ></textarea>
+        <p v-if="rejectError" class="reject-modal__error">{{ rejectError }}</p>
+        <div class="reject-modal__actions">
+          <button
+            class="reject-modal__submit"
+            type="button"
+            :disabled="rejecting"
+            @click="submitReject"
+          >
+            {{ rejecting ? '提交中…' : '确认驳回' }}
+          </button>
+          <button class="reject-modal__cancel" type="button" @click="closeReject">取消</button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -289,10 +377,98 @@ async function onWithdraw(claim: ClaimView): Promise<void> {
   font-size: 13px;
 }
 
-.claim-card__reject {
+.claim-card__reject-reason {
   margin: 6px 0;
   color: #c0392b;
   font-size: 13px;
+}
+
+.claim-card__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.claim-card__accept,
+.claim-card__reject {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.claim-card__accept {
+  border: none;
+  background: #2e7d32;
+  color: #fff;
+}
+
+.claim-card__reject {
+  border: 1px solid #c0392b;
+  background: #fff;
+  color: #c0392b;
+}
+
+.reject-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.reject-modal__box {
+  width: 320px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.reject-modal__title {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.reject-modal__reason {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid #d9dbe0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.reject-modal__error {
+  margin: 8px 0 0;
+  color: #c0392b;
+  font-size: 13px;
+}
+
+.reject-modal__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.reject-modal__submit {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #2e7d32;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.reject-modal__cancel {
+  padding: 6px 14px;
+  border: 1px solid #d9dbe0;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
 }
 
 .claim-card__withdraw {

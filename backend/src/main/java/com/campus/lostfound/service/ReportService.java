@@ -8,6 +8,10 @@ import com.campus.lostfound.dto.ReportSearchRequest;
 import com.campus.lostfound.dto.ReportSummary;
 import com.campus.lostfound.dto.UpdateReportRequest;
 import com.campus.lostfound.dto.UpdateStatusRequest;
+import com.campus.lostfound.entity.ChatSession;
+import com.campus.lostfound.entity.ChatSessionStatus;
+import com.campus.lostfound.entity.Claim;
+import com.campus.lostfound.entity.ClaimStatus;
 import com.campus.lostfound.entity.Custody;
 import com.campus.lostfound.entity.Report;
 import com.campus.lostfound.entity.ReportImage;
@@ -15,6 +19,8 @@ import com.campus.lostfound.entity.ReportStatus;
 import com.campus.lostfound.entity.ReportType;
 import com.campus.lostfound.exception.BusinessException;
 import com.campus.lostfound.exception.ErrorCodes;
+import com.campus.lostfound.repository.ChatSessionRepository;
+import com.campus.lostfound.repository.ClaimRepository;
 import com.campus.lostfound.repository.ReportRepository;
 import com.campus.lostfound.repository.ReportSpecifications;
 import com.campus.lostfound.repository.UserRepository;
@@ -51,13 +57,19 @@ public class ReportService {
 
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
+    private final ClaimRepository claimRepository;
+    private final ChatSessionRepository chatSessionRepository;
     private final Path uploadDir;
 
     public ReportService(ReportRepository reportRepository,
                          UserRepository userRepository,
+                         ClaimRepository claimRepository,
+                         ChatSessionRepository chatSessionRepository,
                          @Value("${app.upload.dir}") String uploadDir) {
         this.reportRepository = reportRepository;
         this.userRepository = userRepository;
+        this.claimRepository = claimRepository;
+        this.chatSessionRepository = chatSessionRepository;
         this.uploadDir = Paths.get(uploadDir).toAbsolutePath().normalize();
     }
 
@@ -283,7 +295,31 @@ public class ReportService {
         }
 
         report.setStatus(status);
-        return toDetail(reportRepository.save(report));
+        ReportDetail detail = toDetail(reportRepository.save(report));
+
+        // 交还完成 / 移交完成：该启事下已接受的认领申请置为 CLOSED，对应会话一并关闭。
+        closeClaimsAndChatSessions(reportId);
+
+        return detail;
+    }
+
+    /**
+     * 启事交还完成后：把该启事下 ACCEPTED 的认领申请置为 CLOSED，并把对应会话置为 CLOSED（closedAt=now）。
+     */
+    private void closeClaimsAndChatSessions(Long reportId) {
+        LocalDateTime now = LocalDateTime.now();
+        for (Claim claim : claimRepository.findByReportIdAndStatus(reportId, ClaimStatus.ACCEPTED)) {
+            claim.setStatus(ClaimStatus.CLOSED);
+            claim.setHandledAt(now);
+            claimRepository.save(claim);
+        }
+        for (ChatSession session : chatSessionRepository.findByReportId(reportId)) {
+            if (session.getStatus() != ChatSessionStatus.CLOSED) {
+                session.setStatus(ChatSessionStatus.CLOSED);
+                session.setClosedAt(now);
+                chatSessionRepository.save(session);
+            }
+        }
     }
 
     /**

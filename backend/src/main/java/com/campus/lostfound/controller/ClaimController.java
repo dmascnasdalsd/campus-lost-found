@@ -3,6 +3,7 @@ package com.campus.lostfound.controller;
 import com.campus.lostfound.dto.ApiResponse;
 import com.campus.lostfound.dto.ClaimView;
 import com.campus.lostfound.dto.CreateClaimRequest;
+import com.campus.lostfound.dto.RejectClaimRequest;
 import com.campus.lostfound.service.ClaimService;
 
 import jakarta.validation.Valid;
@@ -53,5 +54,27 @@ public class ClaimController {
     public ApiResponse<ClaimView> withdraw(@PathVariable Long id, Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         return ApiResponse.ok(claimService.withdraw(userId, id));
+    }
+
+    /** 接受认领申请：仅启事发布者或管理员。 */
+    @PostMapping("/claims/{id}/accept")
+    public ApiResponse<ClaimView> accept(@PathVariable Long id, Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.ok(claimService.accept(userId, isAdmin(authentication), id));
+    }
+
+    /** 驳回认领申请：仅启事发布者或管理员，且必须填写驳回原因。 */
+    @PostMapping("/claims/{id}/reject")
+    public ApiResponse<ClaimView> reject(@PathVariable Long id,
+                                         @Valid @RequestBody RejectClaimRequest request,
+                                         Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.ok(claimService.reject(userId, isAdmin(authentication), id,
+                request.rejectReason()));
+    }
+
+    private static boolean isAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
     }
 }

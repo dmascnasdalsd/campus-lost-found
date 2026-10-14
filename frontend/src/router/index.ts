@@ -7,6 +7,8 @@ import ReportsNewPage from '@/pages/ReportsNewPage.vue'
 import ReportDetailPage from '@/pages/ReportDetailPage.vue'
 import MyReportsPage from '@/pages/MyReportsPage.vue'
 import MyClaimsPage from '@/pages/MyClaimsPage.vue'
+import MyChatsPage from '@/pages/MyChatsPage.vue'
+import ChatPage from '@/pages/ChatPage.vue'
 import { useAuthStore } from '@/stores/auth'
 
 export const routes: RouteRecordRaw[] = [
@@ -46,6 +48,18 @@ export const routes: RouteRecordRaw[] = [
     path: '/me/claims',
     name: 'my-claims',
     component: MyClaimsPage,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/me/chats',
+    name: 'my-chats',
+    component: MyChatsPage,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/me/chats/:id',
+    name: 'chat',
+    component: ChatPage,
     meta: { requiresAuth: true }
   }
 ]
