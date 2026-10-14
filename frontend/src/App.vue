@@ -35,6 +35,7 @@ async function onLogout(): Promise<void> {
       <div class="app__actions">
         <template v-if="auth.isAuthenticated">
           <RouterLink class="app__link" to="/me/reports">我的发布</RouterLink>
+          <RouterLink class="app__link" to="/me/claims">我的认领</RouterLink>
           <span class="app__user">{{ auth.user?.nickname ?? '已登录' }}</span>
           <button class="app__link" type="button" @click="onLogout">退出登录</button>
         </template>

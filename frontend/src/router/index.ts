@@ -6,6 +6,7 @@ import RegisterPage from '@/pages/RegisterPage.vue'
 import ReportsNewPage from '@/pages/ReportsNewPage.vue'
 import ReportDetailPage from '@/pages/ReportDetailPage.vue'
 import MyReportsPage from '@/pages/MyReportsPage.vue'
+import MyClaimsPage from '@/pages/MyClaimsPage.vue'
 import { useAuthStore } from '@/stores/auth'
 
 export const routes: RouteRecordRaw[] = [
@@ -39,6 +40,12 @@ export const routes: RouteRecordRaw[] = [
     path: '/me/reports',
     name: 'my-reports',
     component: MyReportsPage,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/me/claims',
+    name: 'my-claims',
+    component: MyClaimsPage,
     meta: { requiresAuth: true }
   }
 ]

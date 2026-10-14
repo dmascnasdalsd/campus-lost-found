@@ -1,16 +1,43 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ApiError } from '@/api/client'
 import { getReport } from '@/api/reports'
+import { createClaim } from '@/api/claims'
 import type { ReportDetail } from '@/api/types'
+import { useAuthStore } from '@/stores/auth'
 import StatusBadge from '@/components/StatusBadge.vue'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const report = ref<ReportDetail | null>(null)
 const loading = ref(true)
 const failed = ref(false)
 
 const activeImage = ref(0)
+
+/** 已结束的启事不再接受新的认领申请。 */
+const CLOSED_STATUSES: ReportDetail['status'][] = ['RETURNED', 'HANDED_OVER', 'OFFLINE']
+
+/** 当前用户是否为该启事的发布者（前端据此隐藏申请入口）。 */
+const isPublisher = computed(() => {
+  const userId = auth.user?.id
+  const publisherId = report.value?.publisher?.id
+  return userId != null && publisherId != null && userId === publisherId
+})
+
+/** 启事是否仍在可申请状态。 */
+const canClaim = computed(
+  () => report.value !== null && !CLOSED_STATUSES.includes(report.value.status)
+)
+
+const claimOpen = ref(false)
+const claimForm = reactive({ featureDesc: '', expectTime: '', expectPlace: '' })
+const claimErrors = ref<Record<string, string>>({})
+const claimSubmitting = ref(false)
+const claimError = ref('')
+const claimSuccess = ref('')
 
 const contactTypeLabels: Record<string, string> = {
   phone: '手机号',
@@ -38,6 +65,51 @@ function nextImage(): void {
   const count = report.value?.images.length ?? 0
   if (count === 0) return
   activeImage.value = (activeImage.value + 1) % count
+}
+
+function toggleClaimForm(): void {
+  claimOpen.value = !claimOpen.value
+  claimError.value = ''
+}
+
+/** 未登录时引导去登录，并带上回跳路径回到本页。 */
+function goLogin(): void {
+  void router.push({ path: '/login', query: { redirect: route.fullPath } })
+}
+
+function validateClaim(): boolean {
+  const next: Record<string, string> = {}
+  if (claimForm.featureDesc.trim() === '') {
+    next.featureDesc = '请填写独有特征说明'
+  }
+  claimErrors.value = next
+  return Object.keys(next).length === 0
+}
+
+async function submitClaim(): Promise<void> {
+  claimError.value = ''
+  claimSuccess.value = ''
+  if (!validateClaim()) {
+    return
+  }
+
+  claimSubmitting.value = true
+  try {
+    await createClaim(String(route.params.id), {
+      featureDesc: claimForm.featureDesc.trim(),
+      expectTime: claimForm.expectTime === '' ? undefined : claimForm.expectTime,
+      expectPlace: claimForm.expectPlace.trim() === '' ? undefined : claimForm.expectPlace.trim()
+    })
+    claimOpen.value = false
+    claimForm.featureDesc = ''
+    claimForm.expectTime = ''
+    claimForm.expectPlace = ''
+    claimSuccess.value = '认领申请已提交，等待发布者处理'
+  } catch (error) {
+    claimError.value = error instanceof ApiError ? error.message : '提交失败，请稍后重试'
+  } finally {
+    claimSubmitting.value = false
+  }
 }
 
 async function load(): Promise<void> {
@@ -142,6 +214,53 @@ onMounted(load)
             {{ contactTypeLabel }}：{{ report.publisher.contactValue }}
           </p>
           <p v-else class="publisher__contact publisher__contact--hint">通过站内会话联系</p>
+        </template>
+      </section>
+
+      <section class="claim">
+        <h2 class="claim__title">申请认领</h2>
+
+        <p v-if="!canClaim" class="claim__hint">该启事已结束，无法发起认领申请。</p>
+        <p v-else-if="!auth.isAuthenticated" class="claim__hint">
+          <button class="claim__login" type="button" @click="goLogin">登录后申请认领</button>
+        </p>
+        <p v-else-if="isPublisher" class="claim__hint">这是你自己发布的启事，无需申请认领。</p>
+
+        <template v-else>
+          <p v-if="claimSuccess" class="claim__success">{{ claimSuccess }}</p>
+          <button v-if="!claimOpen" class="claim__open" type="button" @click="toggleClaimForm">
+            申请认领
+          </button>
+
+          <form v-if="claimOpen" class="claim-form" novalidate @submit.prevent="submitClaim">
+            <label class="field">
+              <span class="field__label">独有特征说明</span>
+              <textarea
+                v-model="claimForm.featureDesc"
+                class="claim-form__feature"
+                rows="3"
+                placeholder="请描述只有你才知道的物品细节，便于发布者核对"
+              ></textarea>
+              <span v-if="claimErrors.featureDesc" class="field__error">{{ claimErrors.featureDesc }}</span>
+            </label>
+            <label class="field">
+              <span class="field__label">期望交还时间（可选）</span>
+              <input v-model="claimForm.expectTime" class="claim-form__time" type="datetime-local" />
+            </label>
+            <label class="field">
+              <span class="field__label">期望交还地点（可选）</span>
+              <input v-model="claimForm.expectPlace" class="claim-form__place" type="text" />
+            </label>
+
+            <p v-if="claimError" class="claim-form__error">{{ claimError }}</p>
+
+            <div class="claim-form__actions">
+              <button class="claim-form__submit" type="submit" :disabled="claimSubmitting">
+                {{ claimSubmitting ? '提交中…' : '提交申请' }}
+              </button>
+              <button class="claim-form__cancel" type="button" @click="toggleClaimForm">取消</button>
+            </div>
+          </form>
         </template>
       </section>
     </article>
@@ -278,6 +397,103 @@ onMounted(load)
 
 .publisher__contact--hint {
   color: #888;
+}
+
+.claim {
+  margin-top: 20px;
+  padding: 12px;
+  border: 1px solid #e4e6eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.claim__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.claim__hint {
+  margin: 0;
+  color: #888;
+  font-size: 13px;
+}
+
+.claim__login,
+.claim__open {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #2e7d32;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.claim__success {
+  margin: 0 0 8px;
+  color: #2e7d32;
+  font-size: 13px;
+}
+
+.claim-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+}
+
+.field__label {
+  font-size: 12px;
+  color: #444;
+}
+
+.field__error {
+  color: #c0392b;
+  font-size: 12px;
+}
+
+.claim-form__feature,
+.claim-form__time,
+.claim-form__place {
+  padding: 6px 10px;
+  border: 1px solid #d9dbe0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.claim-form__error {
+  margin: 0;
+  color: #c0392b;
+  font-size: 13px;
+}
+
+.claim-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.claim-form__submit {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #2e7d32;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.claim-form__cancel {
+  padding: 6px 14px;
+  border: 1px solid #d9dbe0;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
 }
 
 .badge {

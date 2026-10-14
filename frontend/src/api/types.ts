@@ -112,6 +112,34 @@ export interface ReportStatusUpdatePayload {
   handoverNo?: string
 }
 
+export type ClaimStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN' | 'CLOSED'
+
+/** 认领方向：APPLY_CLAIM 针对招领启事，APPLY_MATCH 针对失物启事。 */
+export type ClaimDirection = 'APPLY_CLAIM' | 'APPLY_MATCH'
+
+/** 认领申请视图：含关联启事摘要与申请人昵称。 */
+export interface ClaimView {
+  id: number
+  direction: ClaimDirection
+  status: ClaimStatus
+  featureDesc: string
+  expectTime: string | null
+  expectPlace: string | null
+  rejectReason: string | null
+  handledAt: string | null
+  createdAt: string
+  report: ReportSummary | null
+  applicantId: number
+  applicantNickname: string | null
+}
+
+/** 发起认领申请请求体：独有特征必填，期望时间地点可选。 */
+export interface CreateClaimRequest {
+  featureDesc: string
+  expectTime?: string
+  expectPlace?: string
+}
+
 export type UserRole = 'USER' | 'ADMIN'
 
 export type UserStatus = 'ACTIVE' | 'DISABLED'
