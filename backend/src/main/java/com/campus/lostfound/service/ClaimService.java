@@ -37,13 +37,14 @@ import java.util.stream.Collectors;
 @Service
 public class ClaimService {
 
-    /** 已结束的启事不再接受新的认领申请。 */
-    private static final List<ReportStatus> CLOSED_REPORT_STATUSES =
-            List.of(ReportStatus.RETURNED, ReportStatus.HANDED_OVER, ReportStatus.OFFLINE);
-
     /** 被视为「进行中」、会阻塞重复申请的申请状态。 */
     private static final List<ClaimStatus> ACTIVE_CLAIM_STATUSES =
             List.of(ClaimStatus.PENDING, ClaimStatus.ACCEPTED);
+
+    /** 已终止的启事状态：不允许在其上继续接受认领申请。 */
+    private static final List<ReportStatus> CLOSED_STATUSES =
+            List.of(ReportStatus.RETURNED, ReportStatus.HANDED_OVER,
+                    ReportStatus.OFFLINE, ReportStatus.REJECTED);
 
     private final ClaimRepository claimRepository;
     private final ReportRepository reportRepository;
@@ -64,7 +65,7 @@ public class ClaimService {
     }
 
     /**
-     * 发起认领申请：校验启事存在、非本人发布、启事未结束、本人无非终态申请。
+     * 发起认领申请：校验启事存在、非本人发布、启事处于 OPEN、本人无非终态申请。
      * 申请方向由启事类型决定（招领 -> APPLY_CLAIM，失物 -> APPLY_MATCH）。
      */
     @Transactional
@@ -75,8 +76,8 @@ public class ClaimService {
         if (report.getPublisherId().equals(applicantId)) {
             throw BusinessException.forbidden("不能对自己发布的启事发起认领申请");
         }
-        if (CLOSED_REPORT_STATUSES.contains(report.getStatus())) {
-            throw BusinessException.invalidParam("该启事已结束，无法发起认领申请");
+        if (report.getStatus() != ReportStatus.OPEN) {
+            throw BusinessException.invalidParam("该启事当前不可发起认领申请");
         }
         if (claimRepository.existsByReportIdAndApplicantIdAndStatusIn(
                 reportId, applicantId, ACTIVE_CLAIM_STATUSES)) {
@@ -135,7 +136,8 @@ public class ClaimService {
     }
 
     /**
-     * 接受认领申请：仅启事发布者或管理员可操作，且仅 PENDING 状态可接受。
+     * 接受认领申请：仅启事发布者或管理员可操作，且仅 PENDING 状态可接受，
+     * 启事须处于未结束状态（未归还 / 未移交 / 未下架 / 未驳回）。
      * 接受后该申请变为 ACCEPTED，启事进入 CLAIMING，同启事下其他 PENDING 申请关闭，
      * 并创建只对双方可见的站内会话。
      */
@@ -148,6 +150,9 @@ public class ClaimService {
 
         ensureHandler(report, userId, admin);
         ensurePending(claim);
+        if (CLOSED_STATUSES.contains(report.getStatus())) {
+            throw BusinessException.conflict("启事已结束，无法接受认领申请");
+        }
 
         LocalDateTime now = LocalDateTime.now();
         claim.setStatus(ClaimStatus.ACCEPTED);

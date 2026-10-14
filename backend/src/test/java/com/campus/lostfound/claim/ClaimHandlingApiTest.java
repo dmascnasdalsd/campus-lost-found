@@ -194,6 +194,31 @@ class ClaimHandlingApiTest {
                 java.sql.Timestamp.class, claimId)).isNotNull();
     }
 
+    @Test
+    void 接受已归还启事上的申请被拒且启事状态不变() throws Exception {
+        long reportId = saveReport(publisherId, "已归还的校园卡", ReportType.FOUND, ReportStatus.RETURNED);
+        long claimId = insertClaim(reportId, applicantId);
+
+        HttpResult result = postAccept(claimId, publisherToken);
+
+        assertThat(result.status()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(result.body().path("code").asInt()).isEqualTo(1005);
+        assertThat(claimStatus(claimId)).isEqualTo("PENDING");
+        assertThat(reportStatus(reportId)).isEqualTo("RETURNED");
+    }
+
+    @Test
+    void 标记已归还后该启事下待处理申请一并关闭() throws Exception {
+        long reportId = saveReport(publisherId, "捡到的校园卡", ReportType.FOUND, ReportStatus.OPEN);
+        long pendingClaimId = createClaim(reportId, otherApplicantToken);
+
+        HttpResult returned = putStatus(reportId, "RETURNED", publisherToken);
+        assertThat(returned.status()).isEqualTo(HttpStatus.OK.value());
+
+        assertThat(claimStatus(pendingClaimId)).isEqualTo("CLOSED");
+        assertThat(chatSessionCount()).isZero();
+    }
+
     // ---------- 请求辅助 ----------
 
     private HttpResult postAccept(long claimId, String token) throws Exception {
@@ -219,6 +244,17 @@ class ClaimHandlingApiTest {
         HttpResult result = postClaim(reportId, token);
         assertThat(result.status()).isEqualTo(HttpStatus.OK.value());
         return result.body().path("data").path("id").asLong();
+    }
+
+    /** 直插一条 PENDING 认领申请：用于构造异常态（如已归还启事下残留的申请），只能绕过 API。 */
+    private long insertClaim(long reportId, long applicantId) {
+        jdbcTemplate.update("""
+                INSERT INTO claim (report_id, applicant_id, direction, feature_desc, status, created_at, updated_at)
+                VALUES (?, ?, 'APPLY_CLAIM', '校园卡卡号后四位是 1234', 'PENDING', NOW(6), NOW(6))
+                """, reportId, applicantId);
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM claim WHERE report_id = ? AND applicant_id = ?",
+                Long.class, reportId, applicantId);
     }
 
     private HttpResult exchange(HttpMethod method, String path, String payload, String token)

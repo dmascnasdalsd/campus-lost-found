@@ -41,6 +41,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -304,11 +305,15 @@ public class ReportService {
     }
 
     /**
-     * 启事交还完成后：把该启事下 ACCEPTED 的认领申请置为 CLOSED，并把对应会话置为 CLOSED（closedAt=now）。
+     * 启事交还完成后：把该启事下 ACCEPTED 与 PENDING 的认领申请一并置为 CLOSED，
+     * 并把对应会话置为 CLOSED（closedAt=now）。
      */
     private void closeClaimsAndChatSessions(Long reportId) {
         LocalDateTime now = LocalDateTime.now();
-        for (Claim claim : claimRepository.findByReportIdAndStatus(reportId, ClaimStatus.ACCEPTED)) {
+        List<Claim> openClaims = new ArrayList<>(
+                claimRepository.findByReportIdAndStatus(reportId, ClaimStatus.ACCEPTED));
+        openClaims.addAll(claimRepository.findByReportIdAndStatus(reportId, ClaimStatus.PENDING));
+        for (Claim claim : openClaims) {
             claim.setStatus(ClaimStatus.CLOSED);
             claim.setHandledAt(now);
             claimRepository.save(claim);

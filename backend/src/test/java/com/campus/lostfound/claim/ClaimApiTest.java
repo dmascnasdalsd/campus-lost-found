@@ -111,6 +111,28 @@ class ClaimApiTest {
     }
 
     @Test
+    void 在认领中的启事上发起申请被拒() throws Exception {
+        long reportId = saveReport(publisherId, "认领中的校园卡", ReportType.LOST, ReportStatus.CLAIMING);
+
+        HttpResult result = postClaim(reportId, validPayload(), applicantToken);
+
+        assertThat(result.status()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(result.body().path("code").asInt()).isEqualTo(1001);
+        assertThat(claimCount()).isZero();
+    }
+
+    @Test
+    void 在待复核的启事上发起申请被拒() throws Exception {
+        long reportId = saveReport(publisherId, "待复核的校园卡", ReportType.LOST, ReportStatus.PENDING_REVIEW);
+
+        HttpResult result = postClaim(reportId, validPayload(), applicantToken);
+
+        assertThat(result.status()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(result.body().path("code").asInt()).isEqualTo(1001);
+        assertThat(claimCount()).isZero();
+    }
+
+    @Test
     void 撤回后可重新申请() throws Exception {
         long reportId = saveReport(publisherId, "捡到的校园卡", ReportType.FOUND, ReportStatus.OPEN);
 
