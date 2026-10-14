@@ -36,3 +36,27 @@ export interface ReportSummary {
   viewCount: number
   createdAt: string
 }
+
+export type UserRole = 'USER' | 'ADMIN'
+
+export type UserStatus = 'ACTIVE' | 'DISABLED'
+
+export interface User {
+  id: number
+  studentNo: string
+  nickname: string
+  department: string | null
+  email: string | null
+  role: UserRole
+  status: UserStatus
+  contactType: string | null
+  contactValue: string | null
+  contactPublic: boolean
+  createdAt: string
+}
+
+/** 登录成功返回：access token 与当前用户。 */
+export interface AuthResponse {
+  token: string
+  user: User
+}
