@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  本机 Maven 全局 settings.xml 把仓库镜像指向了内网私服 http://10.65.7.148:8081，
+  该地址在当前网络下不可达，会导致构建长时间等待超时。
+
+  这个文件只把镜像指向公共仓库（阿里云公共仓库代理中央仓库），
+  用法：mvn -s .mvn/settings-public.xml -f backend/pom.xml <goal>
+  不修改全局 ~/.m2/settings.xml。
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+    <localRepository>C:\Users\86139\.m2\repository_ln</localRepository>
+    <mirrors>
+        <mirror>
+            <id>aliyun-public</id>
+            <name>Aliyun public repository</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+            <mirrorOf>*</mirrorOf>
+        </mirror>
+    </mirrors>
+</settings>
