@@ -37,6 +37,56 @@ export interface ReportSummary {
   createdAt: string
 }
 
+/** 招领启事的保管方式。 */
+export type Custody = 'SELF' | 'AT_SECURITY'
+
+export interface ReportImage {
+  id: number
+  path: string
+  originalName: string
+  mime: string
+  sizeBytes: number
+  sortOrder: number
+}
+
+export interface PublisherSummary {
+  id: number
+  nickname: string
+}
+
+/** 启事详情：含图片列表与发布者摘要。 */
+export interface ReportDetail {
+  id: number
+  type: ReportType
+  title: string
+  category: string
+  location: string
+  locationDetail: string | null
+  eventTime: string | null
+  description: string | null
+  status: ReportStatus
+  pinned: boolean
+  custody: Custody | null
+  handoverNo: string | null
+  viewCount: number
+  publisher: PublisherSummary | null
+  images: ReportImage[]
+  createdAt: string
+}
+
+/** 发布启事请求体。 */
+export interface CreateReportPayload {
+  type: ReportType
+  title: string
+  category: string
+  location: string
+  locationDetail?: string
+  eventTime: string
+  description?: string
+  custody?: Custody
+  handoverNo?: string
+}
+
 export type UserRole = 'USER' | 'ADMIN'
 
 export type UserStatus = 'ACTIVE' | 'DISABLED'

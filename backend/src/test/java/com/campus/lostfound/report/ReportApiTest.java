@@ -1,5 +1,7 @@
 package com.campus.lostfound.report;
 
+import com.campus.lostfound.auth.JwtService;
+import com.campus.lostfound.auth.UserRole;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,9 +9,19 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,7 +46,11 @@ class ReportApiTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private JwtService jwtService;
+
     private long publisherId;
+    private String token;
 
     @BeforeEach
     void resetDatabase() {
@@ -42,6 +58,7 @@ class ReportApiTest {
         jdbcTemplate.execute("DELETE FROM report");
         jdbcTemplate.execute("DELETE FROM app_user");
         publisherId = insertPublisher();
+        token = jwtService.generate(publisherId, UserRole.USER);
     }
 
     @Test
@@ -74,6 +91,104 @@ class ReportApiTest {
         assertThat(data.path("size").asInt()).isEqualTo(20);
     }
 
+    @Test
+    void 非法分类被拒并返回字段级错误() throws Exception {
+        String payload = """
+                {"type":"LOST","title":"校园卡","category":"不存在的分类","location":"图书馆",
+                 "eventTime":"2026-10-14T08:30:00","description":"描述"}
+                """;
+
+        ResponseEntity<String> response = postJson("/api/reports", payload);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        JsonNode node = objectMapper.readTree(response.getBody());
+        assertThat(node.path("code").asInt()).isEqualTo(1001);
+        assertThat(node.path("message").asText()).contains("category");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM report", Integer.class)).isZero();
+    }
+
+    @Test
+    void 招领启事选已交保卫处却缺移交单号被拒() throws Exception {
+        String payload = """
+                {"type":"FOUND","title":"耳机","category":"耳机","location":"图书馆",
+                 "eventTime":"2026-10-14T08:30:00","custody":"AT_SECURITY"}
+                """;
+
+        ResponseEntity<String> response = postJson("/api/reports", payload);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        JsonNode node = objectMapper.readTree(response.getBody());
+        assertThat(node.path("code").asInt()).isEqualTo(1001);
+        assertThat(node.path("message").asText()).contains("handoverNo");
+    }
+
+    @Test
+    void 合法发布后出现在列表且库中已写入() throws Exception {
+        String payload = """
+                {"type":"LOST","title":"黑色的雨伞","category":"雨伞","location":"体育馆/操场",
+                 "locationDetail":"看台东侧","eventTime":"2026-10-14T08:30:00","description":"伞骨有一处补丁"}
+                """;
+
+        ResponseEntity<String> created = postJson("/api/reports", payload);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.OK);
+        JsonNode detail = objectMapper.readTree(created.getBody()).path("data");
+        assertThat(detail.path("type").asText()).isEqualTo("LOST");
+        assertThat(detail.path("status").asText()).isEqualTo("OPEN");
+        assertThat(detail.path("location").asText()).isEqualTo("体育馆/操场");
+        assertThat(detail.path("publisher").path("nickname").asText()).isEqualTo("测试用户");
+        long reportId = detail.path("id").asLong();
+
+        JsonNode list = getReports().path("data");
+        assertThat(list.path("total").asLong()).isEqualTo(1);
+        assertThat(list.path("items").get(0).path("title").asText()).isEqualTo("黑色的雨伞");
+
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM report", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT publisher_id FROM report WHERE id = ?", Long.class, reportId)).isEqualTo(publisherId);
+    }
+
+    @Test
+    void 一次上传超过三张图片被拒() throws Exception {
+        long reportId = createLostReportViaApi("多图测试");
+
+        MultiValueMap<String, Object> parts = new LinkedMultiValueMap<>();
+        for (int i = 0; i < 4; i++) {
+            parts.add("files", new NamedByteArrayResource("image-" + i, "photo" + i + ".png"));
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.setBearerAuth(token);
+        ResponseEntity<String> response = restTemplate.exchange(
+                "/api/reports/" + reportId + "/images", HttpMethod.POST,
+                new HttpEntity<>(parts, headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        JsonNode node = objectMapper.readTree(response.getBody());
+        assertThat(node.path("code").asInt()).isEqualTo(1001);
+        assertThat(node.path("message").asText()).contains("3");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM report_image WHERE report_id = ?", Integer.class, reportId)).isZero();
+    }
+
+    private ResponseEntity<String> postJson(String path, String payload) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(token);
+        return restTemplate.exchange(path, HttpMethod.POST, new HttpEntity<>(payload, headers), String.class);
+    }
+
+    private long createLostReportViaApi(String title) throws Exception {
+        String payload = """
+                {"type":"LOST","title":"%s","category":"其他","location":"图书馆",
+                 "eventTime":"2026-10-14T08:30:00","description":"描述"}
+                """.formatted(title);
+
+        ResponseEntity<String> response = postJson("/api/reports", payload);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return objectMapper.readTree(response.getBody()).path("data").path("id").asLong();
+    }
+
     private JsonNode getReports() throws Exception {
         String raw = restTemplate.getForObject("/api/reports", String.class);
         return objectMapper.readTree(raw);
@@ -99,5 +214,21 @@ class ReportApiTest {
                 VALUES (?, ?, ?, 'USER', 'ACTIVE', 0, NOW(6), NOW(6))
                 """, "2021001", "测试用户", "$2a$10$abcdefghijklmnopqrstuv");
         return jdbcTemplate.queryForObject("SELECT id FROM app_user WHERE student_no = ?", Long.class, "2021001");
+    }
+
+    /** 带文件名的内存文件，用于构造 multipart 请求。 */
+    private static final class NamedByteArrayResource extends ByteArrayResource {
+
+        private final String filename;
+
+        private NamedByteArrayResource(String content, String filename) {
+            super(content.getBytes(StandardCharsets.UTF_8));
+            this.filename = filename;
+        }
+
+        @Override
+        public String getFilename() {
+            return filename;
+        }
     }
 }

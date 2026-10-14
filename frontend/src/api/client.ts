@@ -32,7 +32,11 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = {}
+  // multipart（FormData）不手动设 Content-Type，交给浏览器带 boundary。
+  if (!(init?.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
+  }
   const token = getStoredToken()
   if (token) {
     headers.Authorization = `Bearer ${token}`
