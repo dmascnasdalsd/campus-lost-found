@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -30,6 +31,8 @@ public class ReportService {
     private static final int MAX_IMAGES_PER_REPORT = 3;
     private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
     private static final String SORT_EVENT_TIME = "eventTime";
+    /** 发布后可编辑 / 删除的时间窗。 */
+    private static final Duration EDIT_WINDOW = Duration.ofMinutes(30);
 
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
@@ -167,6 +170,136 @@ public class ReportService {
         }
 
         return toDetail(reportRepository.save(report));
+    }
+
+    /**
+     * 修改启事：仅发布者或管理员可操作，且必须在发布后 30 分钟内。
+     * 采用 PATCH 语义 —— 请求体中为 null 的字段表示不改动。
+     */
+    @Transactional
+    public ReportDetail update(Long userId, boolean admin, Long reportId, UpdateReportRequest request) {
+        Report report = loadReport(reportId);
+        ensureOwner(report, userId, admin);
+        ensureWithinEditWindow(report);
+
+        if (request.title() != null) {
+            String title = request.title().trim();
+            if (title.isEmpty()) {
+                throw BusinessException.invalidParam("title：请填写物品名称");
+            }
+            if (title.length() > 128) {
+                throw BusinessException.invalidParam("title：物品名称不超过 128 字");
+            }
+            report.setTitle(title);
+        }
+        if (request.category() != null) {
+            if (!ReportVocabulary.isValidCategory(request.category())) {
+                throw BusinessException.invalidParam("category：分类必须取自受控词表");
+            }
+            report.setCategory(request.category());
+        }
+        if (request.location() != null) {
+            if (!ReportVocabulary.isValidLocation(request.location())) {
+                throw BusinessException.invalidParam("location：地点必须取自受控词表");
+            }
+            report.setLocation(request.location());
+        }
+        if (request.locationDetail() != null) {
+            report.setLocationDetail(trimToNull(request.locationDetail()));
+        }
+        if (request.eventTime() != null) {
+            report.setEventTime(request.eventTime());
+        }
+        if (request.description() != null) {
+            report.setDescription(trimToNull(request.description()));
+        }
+        if (report.getType() == ReportType.FOUND) {
+            if (request.custody() != null) {
+                report.setCustody(request.custody());
+                if (request.custody() == Custody.SELF) {
+                    report.setHandoverNo(null);
+                }
+            }
+            if (request.handoverNo() != null) {
+                report.setHandoverNo(trimToNull(request.handoverNo()));
+            }
+            if (report.getCustody() == Custody.AT_SECURITY && report.getHandoverNo() == null) {
+                throw BusinessException.invalidParam("handoverNo：移交保卫处时必须填写移交单号");
+            }
+        }
+
+        return toDetail(reportRepository.save(report));
+    }
+
+    /**
+     * 删除启事：权限与时间窗同「修改启事」；图片经 cascade + orphanRemoval 一并删除。
+     */
+    @Transactional
+    public void delete(Long userId, boolean admin, Long reportId) {
+        Report report = loadReport(reportId);
+        ensureOwner(report, userId, admin);
+        ensureWithinEditWindow(report);
+        reportRepository.delete(report);
+    }
+
+    /**
+     * 变更启事状态：仅发布者或管理员可操作，且不受 30 分钟编辑窗口限制。
+     * v1 只接受 RETURNED（已归还）与 HANDED_OVER（已移交，仅招领启事、必须带移交单号）。
+     */
+    @Transactional
+    public ReportDetail updateStatus(Long userId, boolean admin, Long reportId, UpdateStatusRequest request) {
+        ReportStatus status = request.status();
+        if (status != ReportStatus.RETURNED && status != ReportStatus.HANDED_OVER) {
+            throw BusinessException.invalidParam("status：只能变更为 RETURNED（已归还）或 HANDED_OVER（已移交）");
+        }
+
+        Report report = loadReport(reportId);
+        ensureOwner(report, userId, admin);
+
+        if (status == ReportStatus.HANDED_OVER) {
+            if (report.getType() != ReportType.FOUND) {
+                throw BusinessException.invalidParam("status：HANDED_OVER 仅招领启事可用");
+            }
+            String handoverNo = trimToNull(request.handoverNo());
+            if (handoverNo == null) {
+                throw BusinessException.invalidParam("handoverNo：已移交必须填写移交单号");
+            }
+            report.setHandoverNo(handoverNo);
+        }
+
+        report.setStatus(status);
+        return toDetail(reportRepository.save(report));
+    }
+
+    /**
+     * 当前用户的全部启事（含已归还 / 已移交 / 已下架等终态），按 createdAt 倒序。
+     */
+    @Transactional(readOnly = true)
+    public PageResult<ReportSummary> listMine(Long userId, int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        PageRequest pageable = PageRequest.of(safePage, safeSize,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        Page<Report> result = reportRepository.findByPublisherId(userId, pageable);
+        return PageResult.of(result.map(ReportSummary::from));
+    }
+
+    private Report loadReport(Long reportId) {
+        return reportRepository.findById(reportId)
+                .orElseThrow(() -> BusinessException.notFound("启事不存在"));
+    }
+
+    private void ensureOwner(Report report, Long userId, boolean admin) {
+        if (!admin && !report.getPublisherId().equals(userId)) {
+            throw BusinessException.forbidden("只能操作自己发布的启事");
+        }
+    }
+
+    private void ensureWithinEditWindow(Report report) {
+        LocalDateTime createdAt = report.getCreatedAt();
+        if (createdAt != null && createdAt.plus(EDIT_WINDOW).isBefore(LocalDateTime.now())) {
+            throw BusinessException.conflict("启事发布已超过 30 分钟，不能再编辑或删除");
+        }
     }
 
     private void validateVocabulary(CreateReportRequest request) {

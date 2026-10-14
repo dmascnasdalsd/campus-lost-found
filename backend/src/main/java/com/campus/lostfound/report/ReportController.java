@@ -6,9 +6,12 @@ import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -66,5 +69,36 @@ public class ReportController {
                                                   Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         return ApiResponse.ok(reportService.addImages(userId, id, files));
+    }
+
+    /** 修改启事：仅发布者或管理员，且仅在发布后 30 分钟内。 */
+    @PatchMapping("/{id}")
+    public ApiResponse<ReportDetail> update(@PathVariable Long id,
+                                            @RequestBody UpdateReportRequest request,
+                                            Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.ok(reportService.update(userId, isAdmin(authentication), id, request));
+    }
+
+    /** 删除启事：权限与时间窗同「修改启事」。 */
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable Long id, Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        reportService.delete(userId, isAdmin(authentication), id);
+        return ApiResponse.ok(null);
+    }
+
+    /** 标记已归还 / 已移交：仅发布者或管理员，不受 30 分钟编辑窗口限制。 */
+    @PutMapping("/{id}/status")
+    public ApiResponse<ReportDetail> updateStatus(@PathVariable Long id,
+                                                  @Valid @RequestBody UpdateStatusRequest request,
+                                                  Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.ok(reportService.updateStatus(userId, isAdmin(authentication), id, request));
+    }
+
+    private static boolean isAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
     }
 }

@@ -3,8 +3,10 @@ import type {
   CreateReportPayload,
   PageResult,
   ReportDetail,
+  ReportStatusUpdatePayload,
   ReportSummary,
-  ReportType
+  ReportType,
+  UpdateReportPayload
 } from './types'
 
 export type ReportTimeRange = 'today' | '3d' | '7d' | '30d' | 'custom'
@@ -84,4 +86,35 @@ export function uploadImages(reportId: number | string, files: File[]): Promise<
     method: 'POST',
     body: form
   })
+}
+
+/** 修改启事：仅发布者 / 管理员，且需在发布后 30 分钟内。 */
+export function updateReport(id: number | string, payload: UpdateReportPayload): Promise<ReportDetail> {
+  return request<ReportDetail>(`/reports/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  })
+}
+
+/** 删除启事：仅发布者 / 管理员，且需在发布后 30 分钟内。 */
+export function deleteReport(id: number | string): Promise<void> {
+  return request<void>(`/reports/${id}`, { method: 'DELETE' })
+}
+
+/** 标记已归还 / 已移交；已移交需带移交单号。 */
+export function updateReportStatus(
+  id: number | string,
+  status: ReportStatusUpdatePayload['status'],
+  handoverNo?: string
+): Promise<ReportDetail> {
+  const payload: ReportStatusUpdatePayload = handoverNo ? { status, handoverNo } : { status }
+  return request<ReportDetail>(`/reports/${id}/status`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  })
+}
+
+/** 我的发布：当前用户的全部启事（含终态），按发布时间倒序。 */
+export function listMyReports(): Promise<PageResult<ReportSummary>> {
+  return request<PageResult<ReportSummary>>('/me/reports')
 }

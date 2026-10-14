@@ -32,6 +32,7 @@ export interface ReportSummary {
   eventTime: string | null
   status: ReportStatus
   pinned: boolean
+  custody: Custody | null
   thumbnailPath: string | null
   viewCount: number
   createdAt: string
@@ -75,6 +76,8 @@ export interface ReportDetail {
   viewCount: number
   publisher: PublisherSummary | null
   images: ReportImage[]
+  rejectReason: string | null
+  reviewedAt: string | null
   createdAt: string
 }
 
@@ -88,6 +91,24 @@ export interface CreateReportPayload {
   eventTime: string
   description?: string
   custody?: Custody
+  handoverNo?: string
+}
+
+/** 修改启事请求体（PATCH）：缺省字段表示不改动。 */
+export interface UpdateReportPayload {
+  title?: string
+  category?: string
+  location?: string
+  locationDetail?: string
+  eventTime?: string
+  description?: string
+  custody?: Custody
+  handoverNo?: string
+}
+
+/** 变更启事状态请求体：仅支持已归还 / 已移交。 */
+export interface ReportStatusUpdatePayload {
+  status: 'RETURNED' | 'HANDED_OVER'
   handoverNo?: string
 }
 

@@ -23,6 +23,8 @@ public record ReportDetail(
         int viewCount,
         PublisherSummary publisher,
         List<ReportImageInfo> images,
+        String rejectReason,
+        LocalDateTime reviewedAt,
         LocalDateTime createdAt
 ) {
 
@@ -46,6 +48,8 @@ public record ReportDetail(
                 report.getViewCount(),
                 publisher,
                 images,
+                report.getRejectReason(),
+                report.getReviewedAt(),
                 report.getCreatedAt()
         );
     }

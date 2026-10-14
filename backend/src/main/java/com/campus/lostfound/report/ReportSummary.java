@@ -15,6 +15,7 @@ public record ReportSummary(
         LocalDateTime eventTime,
         ReportStatus status,
         boolean pinned,
+        Custody custody,
         String thumbnailPath,
         int viewCount,
         LocalDateTime createdAt
@@ -32,6 +33,7 @@ public record ReportSummary(
                 report.getEventTime(),
                 report.getStatus(),
                 report.isPinned(),
+                report.getCustody(),
                 thumbnail,
                 report.getViewCount(),
                 report.getCreatedAt()
