@@ -253,6 +253,34 @@ export interface AuditLogView {
   createdAt: string
 }
 
+/** 每日统计：某一天的新增启事数与归还成功数。 */
+export interface DailyStatView {
+  date: string
+  created: number
+  returned: number
+}
+
+/** 名称计数：用于地点 / 分类 / 高发时段的分布统计。 */
+export interface NameCountView {
+  name: string
+  count: number
+}
+
+/** 统计看板视图：某统计窗口内的启事聚合结果。 */
+export interface AdminStatsView {
+  range: string
+  from: string
+  to: string
+  totalReports: number
+  returnedReports: number
+  /** 归还率，百分比数值（0~100，保留 1 位小数）。 */
+  returnRate: number
+  daily: DailyStatView[]
+  byLocation: NameCountView[]
+  byCategory: NameCountView[]
+  byHour: NameCountView[]
+}
+
 export type UserRole = 'USER' | 'ADMIN'
 
 export type UserStatus = 'ACTIVE' | 'DISABLED'

@@ -1,5 +1,6 @@
-import { request } from './client'
+import { getStoredToken, request } from './client'
 import type {
+  AdminStatsView,
   AuditLogView,
   FlagHandleResult,
   FlagView,
@@ -65,4 +66,27 @@ export function resolveFlag(id: number | string, action: FlagHandleResult): Prom
     method: 'POST',
     body: JSON.stringify({ action })
   })
+}
+
+/** 统计看板：range=week（最近 7 天）或 month（最近 30 天）。 */
+export function getAdminStats(range: 'week' | 'month'): Promise<AdminStatsView> {
+  return request<AdminStatsView>(`/admin/stats?range=${range}`)
+}
+
+/**
+ * 导出 CSV：某时间段内的启事记录，缺省最近 30 天。
+ * CSV 是文件流而非统一 JSON 响应，直接 fetch 并返回 Blob。
+ */
+export async function exportReportsCsv(from?: string, to?: string): Promise<Blob> {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  const query = params.toString()
+
+  const headers: Record<string, string> = {}
+  const token = getStoredToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const response = await fetch(`/api/admin/export.csv${query ? `?${query}` : ''}`, { headers })
+  return response.blob()
 }

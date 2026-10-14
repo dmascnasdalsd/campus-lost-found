@@ -13,6 +13,7 @@ import NotificationsPage from '@/pages/NotificationsPage.vue'
 import AdminReportsPage from '@/pages/AdminReportsPage.vue'
 import AdminAuditLogsPage from '@/pages/AdminAuditLogsPage.vue'
 import AdminFlagsPage from '@/pages/AdminFlagsPage.vue'
+import AdminStatsPage from '@/pages/AdminStatsPage.vue'
 import { useAuthStore } from '@/stores/auth'
 
 export const routes: RouteRecordRaw[] = [
@@ -88,6 +89,12 @@ export const routes: RouteRecordRaw[] = [
     path: '/admin/flags',
     name: 'admin-flags',
     component: AdminFlagsPage,
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/stats',
+    name: 'admin-stats',
+    component: AdminStatsPage,
     meta: { requiresAuth: true, requiresAdmin: true }
   }
 ]

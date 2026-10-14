@@ -1,7 +1,10 @@
 package com.campus.lostfound.service;
 
+import com.campus.lostfound.dto.AdminStatsView;
 import com.campus.lostfound.dto.AuditLogView;
+import com.campus.lostfound.dto.DailyStatView;
 import com.campus.lostfound.dto.FlagView;
+import com.campus.lostfound.dto.NameCountView;
 import com.campus.lostfound.dto.PageResult;
 import com.campus.lostfound.dto.PublisherSummary;
 import com.campus.lostfound.dto.ReportDetail;
@@ -16,6 +19,7 @@ import com.campus.lostfound.entity.ReportAction;
 import com.campus.lostfound.entity.ReportActionType;
 import com.campus.lostfound.entity.ReportFlag;
 import com.campus.lostfound.entity.ReportStatus;
+import com.campus.lostfound.entity.ReportType;
 import com.campus.lostfound.entity.User;
 import com.campus.lostfound.entity.UserStatus;
 import com.campus.lostfound.exception.BusinessException;
@@ -32,7 +36,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 管理员内容治理：复核队列、通过 / 驳回 / 下架 / 置顶，并记录审计。
@@ -43,6 +60,16 @@ public class AdminService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 50;
+
+    /** 统计窗口：week=最近 7 天，month=最近 30 天。 */
+    private static final int WEEK_DAYS = 7;
+    private static final int MONTH_DAYS = 30;
+
+    private static final DateTimeFormatter EXPORT_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    private static final String EXPORT_HEADER =
+            "ID,类型,标题,分类,地点,事件时间,状态,是否已归还,发布者,置顶,创建时间";
 
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
@@ -224,6 +251,177 @@ public class AdminService {
                 .orElseThrow(() -> BusinessException.notFound("用户不存在"));
         author.setStatus(UserStatus.DISABLED);
         userRepository.save(author);
+    }
+
+    /**
+     * 统计看板：按统计窗口（week=最近 7 天 / month=最近 30 天）聚合启事。
+     * range 缺省或为空 → week；非法值 → 1001。
+     * 窗口为 [今天-(n-1)天 00:00, 现在]，全部基于真实数据聚合，无硬编码。
+     */
+    @Transactional(readOnly = true)
+    public AdminStatsView stats(String range) {
+        int days = windowDays(range);
+        LocalDate toDate = LocalDate.now();
+        LocalDate fromDate = toDate.minusDays(days - 1L);
+
+        List<Report> reports = reportRepository.findByCreatedAtBetweenOrderByCreatedAtAsc(
+                fromDate.atStartOfDay(), LocalDateTime.now());
+
+        long totalReports = reports.size();
+        long returnedReports = reports.stream().filter(r -> isReturned(r.getStatus())).count();
+        double returnRate = totalReports == 0
+                ? 0.0
+                : Math.round(returnedReports * 1000.0 / totalReports) / 10.0;
+
+        return new AdminStatsView(
+                range,
+                fromDate,
+                toDate,
+                totalReports,
+                returnedReports,
+                returnRate,
+                buildDaily(reports, fromDate, toDate),
+                groupCount(reports, Report::getLocation),
+                groupCount(reports, Report::getCategory),
+                buildHourly(reports));
+    }
+
+    /**
+     * 导出 CSV：某时间段内（按 created_at 闭区间）的启事记录。
+     * from/to 缺省 = 最近 30 天；返回带 UTF-8 BOM 的字节流，便于 Excel 正确显示中文。
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportCsv(LocalDate from, LocalDate to) {
+        LocalDate toDate = to != null ? to : LocalDate.now();
+        LocalDate fromDate = from != null ? from : toDate.minusDays(MONTH_DAYS - 1L);
+
+        List<Report> reports = reportRepository.findByCreatedAtBetweenOrderByCreatedAtAsc(
+                fromDate.atStartOfDay(), toDate.atTime(LocalTime.MAX));
+        Map<Long, String> nicknames = loadNicknames(reports);
+
+        StringBuilder sb = new StringBuilder();
+        // UTF-8 BOM，帮助 Excel 识别编码。
+        sb.append('\uFEFF');
+        sb.append(EXPORT_HEADER).append("\r\n");
+        for (Report report : reports) {
+            sb.append(report.getId())
+                    .append(',').append(csv(typeLabel(report.getType())))
+                    .append(',').append(csv(report.getTitle()))
+                    .append(',').append(csv(report.getCategory()))
+                    .append(',').append(csv(report.getLocation()))
+                    .append(',').append(csv(formatTime(report.getEventTime())))
+                    .append(',').append(csv(statusLabel(report.getStatus())))
+                    .append(',').append(csv(isReturned(report.getStatus()) ? "是" : "否"))
+                    .append(',').append(csv(nicknames.getOrDefault(report.getPublisherId(), "")))
+                    .append(',').append(csv(report.isPinned() ? "是" : "否"))
+                    .append(',').append(csv(formatTime(report.getCreatedAt())))
+                    .append("\r\n");
+        }
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** 解析统计窗口天数：week→7、month→30、缺省→week，非法值 → 1001。 */
+    private static int windowDays(String range) {
+        if (range == null || range.isBlank() || "week".equals(range)) {
+            return WEEK_DAYS;
+        }
+        if ("month".equals(range)) {
+            return MONTH_DAYS;
+        }
+        throw BusinessException.invalidParam("range：取值必须是 week 或 month");
+    }
+
+    private static boolean isReturned(ReportStatus status) {
+        return status == ReportStatus.RETURNED || status == ReportStatus.HANDED_OVER;
+    }
+
+    /** 每日序列：窗口内每一天都出现，无数据的日期补 0。 */
+    private static List<DailyStatView> buildDaily(List<Report> reports, LocalDate fromDate, LocalDate toDate) {
+        Map<LocalDate, long[]> counts = new TreeMap<>();
+        for (LocalDate date = fromDate; !date.isAfter(toDate); date = date.plusDays(1)) {
+            counts.put(date, new long[2]);
+        }
+        for (Report report : reports) {
+            long[] bucket = counts.get(report.getCreatedAt().toLocalDate());
+            if (bucket != null) {
+                bucket[0]++;
+                if (isReturned(report.getStatus())) {
+                    bucket[1]++;
+                }
+            }
+        }
+        return counts.entrySet().stream()
+                .map(entry -> new DailyStatView(entry.getKey(), entry.getValue()[0], entry.getValue()[1]))
+                .toList();
+    }
+
+    /** 按名称（地点 / 分类）分组计数，count 倒序，同数按名称升序。 */
+    private static List<NameCountView> groupCount(List<Report> reports, Function<Report, String> keyFn) {
+        Map<String, Long> counts = new HashMap<>();
+        for (Report report : reports) {
+            counts.merge(keyFn.apply(report), 1L, Long::sum);
+        }
+        Comparator<Map.Entry<String, Long>> order =
+                Comparator.<Map.Entry<String, Long>>comparingLong(Map.Entry::getValue)
+                        .reversed()
+                        .thenComparing(Map.Entry::getKey);
+        return counts.entrySet().stream()
+                .sorted(order)
+                .map(entry -> new NameCountView(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
+    /** 高发时段：按 event_time 的小时分组，0~23 全量补 0，name 形如 "09:00"。 */
+    private static List<NameCountView> buildHourly(List<Report> reports) {
+        long[] counts = new long[24];
+        for (Report report : reports) {
+            if (report.getEventTime() != null) {
+                counts[report.getEventTime().getHour()]++;
+            }
+        }
+        List<NameCountView> result = new ArrayList<>(24);
+        for (int hour = 0; hour < 24; hour++) {
+            result.add(new NameCountView(String.format("%02d:00", hour), counts[hour]));
+        }
+        return result;
+    }
+
+    private Map<Long, String> loadNicknames(List<Report> reports) {
+        Set<Long> publisherIds = reports.stream().map(Report::getPublisherId).collect(Collectors.toSet());
+        Map<Long, String> nicknames = new HashMap<>();
+        for (User user : userRepository.findAllById(publisherIds)) {
+            nicknames.put(user.getId(), user.getNickname());
+        }
+        return nicknames;
+    }
+
+    private static String typeLabel(ReportType type) {
+        return type == ReportType.LOST ? "失物" : "招领";
+    }
+
+    private static String statusLabel(ReportStatus status) {
+        return switch (status) {
+            case OPEN -> "进行中";
+            case PENDING_REVIEW -> "待复核";
+            case CLAIMING -> "认领中";
+            case RETURNED -> "已归还";
+            case HANDED_OVER -> "已移交";
+            case OFFLINE -> "已下架";
+            case REJECTED -> "已驳回";
+        };
+    }
+
+    private static String formatTime(LocalDateTime time) {
+        return time == null ? "" : time.format(EXPORT_TIME_FORMAT);
+    }
+
+    /** CSV 字段转义：含逗号、引号或换行时加双引号并转义内部引号。 */
+    private static String csv(String value) {
+        String text = value == null ? "" : value;
+        if (text.contains(",") || text.contains("\"") || text.contains("\n") || text.contains("\r")) {
+            return "\"" + text.replace("\"", "\"\"") + "\"";
+        }
+        return text;
     }
 
     private void record(Long operatorId, ReportActionType action, Long reportId, String reason) {

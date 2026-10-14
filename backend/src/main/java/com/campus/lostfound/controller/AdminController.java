@@ -1,6 +1,7 @@
 package com.campus.lostfound.controller;
 
 import com.campus.lostfound.dto.AdminActionRequest;
+import com.campus.lostfound.dto.AdminStatsView;
 import com.campus.lostfound.dto.ApiResponse;
 import com.campus.lostfound.dto.AuditLogView;
 import com.campus.lostfound.dto.PageResult;
@@ -8,6 +9,12 @@ import com.campus.lostfound.dto.ReportDetail;
 import com.campus.lostfound.service.AdminService;
 
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +23,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 
 /**
  * 管理员内容治理入口。角色限制由 SecurityConfig 的 /api/admin/** 规则统一负责，
@@ -74,6 +84,27 @@ public class AdminController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.ok(adminService.auditLogs(page, size));
+    }
+
+    /** 统计看板：range=week（最近 7 天）或 month（最近 30 天），缺省 week。 */
+    @GetMapping("/stats")
+    public ApiResponse<AdminStatsView> stats(
+            @RequestParam(required = false, defaultValue = "week") String range) {
+        return ApiResponse.ok(adminService.stats(range));
+    }
+
+    /** 导出 CSV：某时间段内的启事记录，缺省最近 30 天；直接返回文件流。 */
+    @GetMapping("/export.csv")
+    public ResponseEntity<byte[]> exportCsv(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        byte[] body = adminService.exportCsv(from, to);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(new MediaType("text", "csv", StandardCharsets.UTF_8));
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename("lostfound-export.csv")
+                .build());
+        return new ResponseEntity<>(body, headers, HttpStatus.OK);
     }
 
     private static Long adminId(Authentication authentication) {
