@@ -10,6 +10,7 @@ import com.campus.lostfound.dto.UpdateReportRequest;
 import com.campus.lostfound.dto.UpdateStatusRequest;
 import com.campus.lostfound.entity.ReportType;
 import com.campus.lostfound.service.ReportService;
+import com.campus.lostfound.support.AuthSupport;
 
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -86,14 +87,14 @@ public class ReportController {
                                             @RequestBody UpdateReportRequest request,
                                             Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        return ApiResponse.ok(reportService.update(userId, isAdmin(authentication), id, request));
+        return ApiResponse.ok(reportService.update(userId, AuthSupport.isAdmin(authentication), id, request));
     }
 
     /** 删除启事：权限与时间窗同「修改启事」。 */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id, Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        reportService.delete(userId, isAdmin(authentication), id);
+        reportService.delete(userId, AuthSupport.isAdmin(authentication), id);
         return ApiResponse.ok(null);
     }
 
@@ -103,11 +104,6 @@ public class ReportController {
                                                   @Valid @RequestBody UpdateStatusRequest request,
                                                   Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        return ApiResponse.ok(reportService.updateStatus(userId, isAdmin(authentication), id, request));
-    }
-
-    private static boolean isAdmin(Authentication authentication) {
-        return authentication.getAuthorities().stream()
-                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
+        return ApiResponse.ok(reportService.updateStatus(userId, AuthSupport.isAdmin(authentication), id, request));
     }
 }

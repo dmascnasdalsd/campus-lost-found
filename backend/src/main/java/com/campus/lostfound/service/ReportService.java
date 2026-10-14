@@ -24,6 +24,7 @@ import com.campus.lostfound.repository.ClaimRepository;
 import com.campus.lostfound.repository.ReportRepository;
 import com.campus.lostfound.repository.ReportSpecifications;
 import com.campus.lostfound.repository.UserRepository;
+import com.campus.lostfound.support.Texts;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -129,16 +130,16 @@ public class ReportService {
         report.setTitle(request.title().trim());
         report.setCategory(request.category());
         report.setLocation(request.location());
-        report.setLocationDetail(trimToNull(request.locationDetail()));
+        report.setLocationDetail(Texts.trimToNull(request.locationDetail()));
         report.setEventTime(request.eventTime());
-        report.setDescription(trimToNull(request.description()));
+        report.setDescription(Texts.trimToNull(request.description()));
         report.setStatus(ReportStatus.OPEN);
         report.setPublisherId(publisherId);
 
         if (request.type() == ReportType.FOUND) {
             report.setCustody(request.custody());
             if (request.custody() == Custody.AT_SECURITY) {
-                String handoverNo = trimToNull(request.handoverNo());
+                String handoverNo = Texts.trimToNull(request.handoverNo());
                 if (handoverNo == null) {
                     throw BusinessException.invalidParam("handoverNo：移交保卫处时必须填写移交单号");
                 }
@@ -233,13 +234,13 @@ public class ReportService {
             report.setLocation(request.location());
         }
         if (request.locationDetail() != null) {
-            report.setLocationDetail(trimToNull(request.locationDetail()));
+            report.setLocationDetail(Texts.trimToNull(request.locationDetail()));
         }
         if (request.eventTime() != null) {
             report.setEventTime(request.eventTime());
         }
         if (request.description() != null) {
-            report.setDescription(trimToNull(request.description()));
+            report.setDescription(Texts.trimToNull(request.description()));
         }
         if (report.getType() == ReportType.FOUND) {
             if (request.custody() != null) {
@@ -249,7 +250,7 @@ public class ReportService {
                 }
             }
             if (request.handoverNo() != null) {
-                report.setHandoverNo(trimToNull(request.handoverNo()));
+                report.setHandoverNo(Texts.trimToNull(request.handoverNo()));
             }
             if (report.getCustody() == Custody.AT_SECURITY && report.getHandoverNo() == null) {
                 throw BusinessException.invalidParam("handoverNo：移交保卫处时必须填写移交单号");
@@ -288,7 +289,7 @@ public class ReportService {
             if (report.getType() != ReportType.FOUND) {
                 throw BusinessException.invalidParam("status：HANDED_OVER 仅招领启事可用");
             }
-            String handoverNo = trimToNull(request.handoverNo());
+            String handoverNo = Texts.trimToNull(request.handoverNo());
             if (handoverNo == null) {
                 throw BusinessException.invalidParam("handoverNo：已移交必须填写移交单号");
             }
@@ -413,13 +414,5 @@ public class ReportService {
         }
         String extension = filename.substring(dot).toLowerCase();
         return extension.length() > 16 ? ".jpg" : extension;
-    }
-
-    private static String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

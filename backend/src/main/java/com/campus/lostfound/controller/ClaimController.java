@@ -5,6 +5,7 @@ import com.campus.lostfound.dto.ClaimView;
 import com.campus.lostfound.dto.CreateClaimRequest;
 import com.campus.lostfound.dto.RejectClaimRequest;
 import com.campus.lostfound.service.ClaimService;
+import com.campus.lostfound.support.AuthSupport;
 
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
@@ -60,7 +61,7 @@ public class ClaimController {
     @PostMapping("/claims/{id}/accept")
     public ApiResponse<ClaimView> accept(@PathVariable Long id, Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        return ApiResponse.ok(claimService.accept(userId, isAdmin(authentication), id));
+        return ApiResponse.ok(claimService.accept(userId, AuthSupport.isAdmin(authentication), id));
     }
 
     /** 驳回认领申请：仅启事发布者或管理员，且必须填写驳回原因。 */
@@ -69,12 +70,7 @@ public class ClaimController {
                                          @Valid @RequestBody RejectClaimRequest request,
                                          Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        return ApiResponse.ok(claimService.reject(userId, isAdmin(authentication), id,
+        return ApiResponse.ok(claimService.reject(userId, AuthSupport.isAdmin(authentication), id,
                 request.rejectReason()));
-    }
-
-    private static boolean isAdmin(Authentication authentication) {
-        return authentication.getAuthorities().stream()
-                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
     }
 }

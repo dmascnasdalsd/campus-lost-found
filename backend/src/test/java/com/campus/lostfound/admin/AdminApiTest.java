@@ -56,7 +56,7 @@ class AdminApiTest {
     private String userToken;
 
     @BeforeEach
-    void resetDatabase() {
+    void 每个用例前清空数据库() {
         // 先删引用 app_user 的子表，避免外键约束阻断清理。
         jdbcTemplate.execute("DELETE FROM report_image");
         jdbcTemplate.execute("DELETE FROM message");

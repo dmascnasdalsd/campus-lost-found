@@ -9,6 +9,7 @@ import com.campus.lostfound.entity.UserRole;
 import com.campus.lostfound.entity.UserStatus;
 import com.campus.lostfound.exception.BusinessException;
 import com.campus.lostfound.repository.UserRepository;
+import com.campus.lostfound.support.Texts;
 
 import io.jsonwebtoken.JwtException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -47,8 +48,8 @@ public class AuthService {
         User user = new User();
         user.setStudentNo(studentNo);
         user.setNickname(request.nickname().trim());
-        user.setDepartment(trimToNull(request.department()));
-        user.setEmail(trimToNull(request.email()));
+        user.setDepartment(Texts.trimToNull(request.department()));
+        user.setEmail(Texts.trimToNull(request.email()));
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRole(UserRole.USER);
         user.setStatus(UserStatus.ACTIVE);
@@ -101,13 +102,5 @@ public class AuthService {
         }
         String token = authorizationHeader.substring("Bearer ".length()).trim();
         return token.isEmpty() ? null : token;
-    }
-
-    private static String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

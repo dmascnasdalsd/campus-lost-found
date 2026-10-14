@@ -68,7 +68,7 @@ class ReportLifecycleApiTest {
     private String adminToken;
 
     @BeforeEach
-    void resetDatabase() {
+    void 每个用例前清空数据库() {
         patchClient = new RestTemplate(new JdkClientHttpRequestFactory());
         patchClient.setErrorHandler(new ResponseErrorHandler() {
             @Override

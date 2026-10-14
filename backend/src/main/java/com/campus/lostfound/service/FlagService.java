@@ -13,6 +13,7 @@ import com.campus.lostfound.repository.MessageRepository;
 import com.campus.lostfound.repository.ReportFlagRepository;
 import com.campus.lostfound.repository.ReportRepository;
 import com.campus.lostfound.repository.UserRepository;
+import com.campus.lostfound.support.Texts;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -79,7 +80,7 @@ public class FlagService {
         flag.setTargetType(targetType);
         flag.setTargetId(targetId);
         flag.setReason(request.reason());
-        flag.setDetail(trimToNull(request.detail()));
+        flag.setDetail(Texts.trimToNull(request.detail()));
         flag.setStatus(FlagStatus.PENDING);
         return flag;
     }
@@ -108,13 +109,5 @@ public class FlagService {
             return null;
         }
         return body.length() <= SUMMARY_MAX ? body : body.substring(0, SUMMARY_MAX) + "…";
-    }
-
-    private static String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

@@ -60,7 +60,7 @@ class ReportApiTest {
     private String token;
 
     @BeforeEach
-    void resetDatabase() {
+    void 每个用例前清空数据库() {
         jdbcTemplate.execute("DELETE FROM report_image");
         jdbcTemplate.execute("DELETE FROM report");
         jdbcTemplate.execute("DELETE FROM app_user");

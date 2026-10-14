@@ -19,6 +19,7 @@ import com.campus.lostfound.repository.ChatSessionRepository;
 import com.campus.lostfound.repository.ClaimRepository;
 import com.campus.lostfound.repository.ReportRepository;
 import com.campus.lostfound.repository.UserRepository;
+import com.campus.lostfound.support.Texts;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -92,7 +93,7 @@ public class ClaimService {
                 : ClaimDirection.APPLY_MATCH);
         claim.setFeatureDesc(request.featureDesc().trim());
         claim.setExpectTime(request.expectTime());
-        claim.setExpectPlace(trimToNull(request.expectPlace()));
+        claim.setExpectPlace(Texts.trimToNull(request.expectPlace()));
         claim.setStatus(ClaimStatus.PENDING);
 
         Claim saved = claimRepository.save(claim);
@@ -189,7 +190,7 @@ public class ClaimService {
      */
     @Transactional
     public ClaimView reject(Long userId, boolean admin, Long claimId, String rejectReason) {
-        String reason = trimToNull(rejectReason);
+        String reason = Texts.trimToNull(rejectReason);
         if (reason == null) {
             throw BusinessException.invalidParam("rejectReason：请填写驳回原因");
         }
@@ -272,13 +273,5 @@ public class ClaimService {
             ReportSummary summary = report == null ? null : ReportSummary.from(report);
             return ClaimView.from(claim, summary, nicknamesById.get(claim.getApplicantId()));
         }).toList();
-    }
-
-    private static String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

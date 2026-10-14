@@ -58,7 +58,7 @@ class ChatApiTest {
     private String strangerToken;
 
     @BeforeEach
-    void resetDatabase() {
+    void 每个用例前清空数据库() {
         jdbcTemplate.execute("DELETE FROM report_image");
         jdbcTemplate.execute("DELETE FROM message");
         jdbcTemplate.execute("DELETE FROM chat_session");
