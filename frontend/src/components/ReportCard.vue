@@ -1,17 +1,8 @@
 <script setup lang="ts">
 import type { ReportSummary } from '@/api/types'
+import StatusBadge from '@/components/StatusBadge.vue'
 
 defineProps<{ report: ReportSummary }>()
-
-const statusLabels: Record<string, string> = {
-  OPEN: '招领中',
-  PENDING_REVIEW: '待复核',
-  CLAIMING: '认领中',
-  RETURNED: '已归还',
-  HANDED_OVER: '已移交',
-  OFFLINE: '已下架',
-  REJECTED: '已驳回'
-}
 </script>
 
 <template>
@@ -33,7 +24,7 @@ const statusLabels: Record<string, string> = {
       </h2>
       <p class="report-card__meta">{{ report.location }} · {{ report.category }}</p>
       <p class="report-card__meta">
-        状态：{{ statusLabels[report.status] ?? report.status }}
+        <StatusBadge :status="report.status" />
         <span v-if="report.pinned" class="badge badge--pinned">置顶</span>
       </p>
     </div>

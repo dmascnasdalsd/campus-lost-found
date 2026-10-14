@@ -23,6 +23,8 @@ import org.springframework.util.MultiValueMap;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -171,6 +173,92 @@ class ReportApiTest {
                 "SELECT COUNT(*) FROM report_image WHERE report_id = ?", Integer.class, reportId)).isZero();
     }
 
+    @Test
+    void 关键词同时匹配标题与描述且大小写不敏感() throws Exception {
+        saveReport("AirPods 耳机", ReportType.LOST, "耳机", "图书馆",
+                LocalDateTime.now().minusHours(1), ReportStatus.OPEN, "白色耳机");
+        saveReport("黑色雨伞", ReportType.FOUND, "雨伞", "食堂",
+                LocalDateTime.now().minusHours(2), ReportStatus.OPEN, "里面有一个 airpods 充电盒");
+        saveReport("水杯", ReportType.LOST, "水杯", "教学楼",
+                LocalDateTime.now().minusHours(3), ReportStatus.OPEN, "蓝色保温杯");
+
+        JsonNode hit = getReports("?keyword=AirPods").path("data");
+
+        assertThat(hit.path("total").asLong()).isEqualTo(2);
+        List<String> titles = new ArrayList<>();
+        hit.path("items").forEach(item -> titles.add(item.path("title").asText()));
+        assertThat(titles).containsExactlyInAnyOrder("AirPods 耳机", "黑色雨伞");
+
+        JsonNode miss = getReports("?keyword=不存在的东西").path("data");
+        assertThat(miss.path("total").asLong()).isZero();
+    }
+
+    @Test
+    void 多条件组合筛选只返回同时满足的启事() throws Exception {
+        saveReport("校园卡-图书馆", ReportType.LOST, "校园卡", "图书馆",
+                LocalDateTime.now().minusHours(1), ReportStatus.OPEN, "描述");
+        saveReport("招领的校园卡", ReportType.FOUND, "校园卡", "图书馆",
+                LocalDateTime.now().minusHours(2), ReportStatus.OPEN, "描述");
+        saveReport("食堂的校园卡", ReportType.LOST, "校园卡", "食堂",
+                LocalDateTime.now().minusHours(3), ReportStatus.OPEN, "描述");
+        saveReport("图书馆的耳机", ReportType.LOST, "耳机", "图书馆",
+                LocalDateTime.now().minusHours(4), ReportStatus.OPEN, "描述");
+
+        JsonNode data = getReports("?type=LOST&category=校园卡&location=图书馆").path("data");
+
+        assertThat(data.path("total").asLong()).isEqualTo(1);
+        assertThat(data.path("items").get(0).path("title").asText()).isEqualTo("校园卡-图书馆");
+    }
+
+    @Test
+    void 默认隐藏已结束启事而includeClosed可显示() throws Exception {
+        saveReport("在招领中的启事", ReportType.LOST, "其他", "图书馆",
+                LocalDateTime.now().minusHours(1), ReportStatus.OPEN, "描述");
+        saveReport("已归还的启事", ReportType.LOST, "其他", "图书馆",
+                LocalDateTime.now().minusHours(2), ReportStatus.RETURNED, "描述");
+        saveReport("已移交的启事", ReportType.FOUND, "其他", "图书馆",
+                LocalDateTime.now().minusHours(3), ReportStatus.HANDED_OVER, "描述");
+        saveReport("已下架的启事", ReportType.LOST, "其他", "图书馆",
+                LocalDateTime.now().minusHours(4), ReportStatus.OFFLINE, "描述");
+
+        JsonNode defaults = getReports("").path("data");
+        assertThat(defaults.path("total").asLong()).isEqualTo(1);
+        assertThat(defaults.path("items").get(0).path("title").asText()).isEqualTo("在招领中的启事");
+
+        JsonNode withClosed = getReports("?includeClosed=true").path("data");
+        assertThat(withClosed.path("total").asLong()).isEqualTo(4);
+    }
+
+    @Test
+    void 详情请求使浏览量自增且响应返回自增后的值() throws Exception {
+        long reportId = saveReport("浏览量测试", ReportType.LOST, "其他", "图书馆",
+                LocalDateTime.now().minusHours(1), ReportStatus.OPEN, "描述");
+
+        assertThat(getReportDetail(reportId).path("data").path("viewCount").asInt()).isEqualTo(1);
+        assertThat(getReportDetail(reportId).path("data").path("viewCount").asInt()).isEqualTo(2);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT view_count FROM report WHERE id = ?", Integer.class, reportId)).isEqualTo(2);
+    }
+
+    @Test
+    void 详情仅在发布者允许公开时带出联系方式() throws Exception {
+        long hiddenReportId = saveReport("联系方式未公开", ReportType.LOST, "其他", "图书馆",
+                LocalDateTime.now().minusHours(1), ReportStatus.OPEN, "描述");
+        JsonNode hidden = getReportDetail(hiddenReportId).path("data").path("publisher");
+        assertThat(hidden.path("contactPublic").asBoolean()).isFalse();
+        assertThat(hidden.path("contactType").isNull()).isTrue();
+        assertThat(hidden.path("contactValue").isNull()).isTrue();
+
+        long publicPublisherId = insertPublisherWithContact("2021900", "公开者", "wechat", "wx-123456", true);
+        long publicReportId = saveReport(publicPublisherId, "联系方式公开", ReportType.LOST, "其他", "图书馆",
+                LocalDateTime.now().minusHours(1), ReportStatus.OPEN, "描述");
+        JsonNode shown = getReportDetail(publicReportId).path("data").path("publisher");
+        assertThat(shown.path("contactPublic").asBoolean()).isTrue();
+        assertThat(shown.path("contactType").asText()).isEqualTo("wechat");
+        assertThat(shown.path("contactValue").asText()).isEqualTo("wx-123456");
+    }
+
     private ResponseEntity<String> postJson(String path, String payload) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -190,8 +278,36 @@ class ReportApiTest {
     }
 
     private JsonNode getReports() throws Exception {
-        String raw = restTemplate.getForObject("/api/reports", String.class);
+        return getReports("");
+    }
+
+    private JsonNode getReports(String query) throws Exception {
+        String raw = restTemplate.getForObject("/api/reports" + query, String.class);
         return objectMapper.readTree(raw);
+    }
+
+    private JsonNode getReportDetail(long reportId) throws Exception {
+        String raw = restTemplate.getForObject("/api/reports/" + reportId, String.class);
+        return objectMapper.readTree(raw);
+    }
+
+    private long saveReport(String title, ReportType type, String category, String location,
+                            LocalDateTime eventTime, ReportStatus status, String description) {
+        return saveReport(publisherId, title, type, category, location, eventTime, status, description);
+    }
+
+    private long saveReport(long ownerId, String title, ReportType type, String category, String location,
+                            LocalDateTime eventTime, ReportStatus status, String description) {
+        Report report = new Report();
+        report.setType(type);
+        report.setTitle(title);
+        report.setCategory(category);
+        report.setLocation(location);
+        report.setEventTime(eventTime);
+        report.setStatus(status);
+        report.setPublisherId(ownerId);
+        report.setDescription(description);
+        return reportRepository.save(report).getId();
     }
 
     private void saveReport(String title, ReportStatus status, boolean pinned) {
@@ -214,6 +330,17 @@ class ReportApiTest {
                 VALUES (?, ?, ?, 'USER', 'ACTIVE', 0, NOW(6), NOW(6))
                 """, "2021001", "测试用户", "$2a$10$abcdefghijklmnopqrstuv");
         return jdbcTemplate.queryForObject("SELECT id FROM app_user WHERE student_no = ?", Long.class, "2021001");
+    }
+
+    private long insertPublisherWithContact(String studentNo, String nickname,
+                                            String contactType, String contactValue, boolean contactPublic) {
+        jdbcTemplate.update("""
+                INSERT INTO app_user (student_no, nickname, password_hash, role, status,
+                                      contact_type, contact_value, contact_public, created_at, updated_at)
+                VALUES (?, ?, ?, 'USER', 'ACTIVE', ?, ?, ?, NOW(6), NOW(6))
+                """, studentNo, nickname, "$2a$10$abcdefghijklmnopqrstuv",
+                contactType, contactValue, contactPublic ? 1 : 0);
+        return jdbcTemplate.queryForObject("SELECT id FROM app_user WHERE student_no = ?", Long.class, studentNo);
     }
 
     /** 带文件名的内存文件，用于构造 multipart 请求。 */

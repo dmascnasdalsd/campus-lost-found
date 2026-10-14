@@ -52,6 +52,10 @@ export interface ReportImage {
 export interface PublisherSummary {
   id: number
   nickname: string
+  /** 仅当 contactPublic 为 true 时才有值，否则为 null。 */
+  contactType: string | null
+  contactValue: string | null
+  contactPublic: boolean
 }
 
 /** 启事详情：含图片列表与发布者摘要。 */

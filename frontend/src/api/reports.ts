@@ -1,18 +1,65 @@
 import { request } from './client'
-import type { CreateReportPayload, PageResult, ReportDetail, ReportSummary } from './types'
+import type {
+  CreateReportPayload,
+  PageResult,
+  ReportDetail,
+  ReportSummary,
+  ReportType
+} from './types'
+
+export type ReportTimeRange = 'today' | '3d' | '7d' | '30d' | 'custom'
+
+export type ReportSort = 'latest' | 'eventTime'
 
 export interface ListReportsParams {
+  type?: ReportType
+  category?: string
+  location?: string
+  timeRange?: ReportTimeRange
+  /** 仅 timeRange=custom 时有效，ISO 字符串（yyyy-MM-ddTHH:mm:ss）。 */
+  startTime?: string
+  endTime?: string
+  keyword?: string
+  sort?: ReportSort
   page?: number
   size?: number
+  includeClosed?: boolean
 }
 
 export function listReports(params: ListReportsParams = {}): Promise<PageResult<ReportSummary>> {
   const query = new URLSearchParams()
+  if (params.type) {
+    query.set('type', params.type)
+  }
+  if (params.category) {
+    query.set('category', params.category)
+  }
+  if (params.location) {
+    query.set('location', params.location)
+  }
+  if (params.timeRange) {
+    query.set('timeRange', params.timeRange)
+  }
+  if (params.startTime) {
+    query.set('startTime', params.startTime)
+  }
+  if (params.endTime) {
+    query.set('endTime', params.endTime)
+  }
+  if (params.keyword) {
+    query.set('keyword', params.keyword)
+  }
+  if (params.sort) {
+    query.set('sort', params.sort)
+  }
   if (params.page !== undefined) {
     query.set('page', String(params.page))
   }
   if (params.size !== undefined) {
     query.set('size', String(params.size))
+  }
+  if (params.includeClosed) {
+    query.set('includeClosed', 'true')
   }
   const suffix = query.toString() === '' ? '' : `?${query.toString()}`
   return request<PageResult<ReportSummary>>(`/reports${suffix}`)
